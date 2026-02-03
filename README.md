@@ -10,6 +10,7 @@ A demonstration project showing how to configure Keycloak v24 with X.509 certifi
 - **Custom Certificate API** - REST API for users to manage their X.509 certificates (similar to GitHub SSH keys)
 - **Custom Authenticator** - Looks up users by certificate fingerprint stored in user attributes
 - **Self-signed certificates** - Complete PKI setup with CA, server, and client certificates
+- **Comprehensive test suite** - Automated tests for API, authentication, and infrastructure
 
 ## Architecture
 
@@ -18,18 +19,18 @@ A demonstration project showing how to configure Keycloak v24 with X.509 certifi
 │   Browser   │ ──────────────────────────▶  │    Nginx    │
 │  (User)     │                              │   (v1.25)   │
 └─────────────┘                              └──────┬──────┘
-                                                    │
-                                             HTTP + Headers
-                                                    │
-                                             ┌──────▼──────┐
-                                             │  Keycloak   │
-                                             │   (v24)     │
-                                             └──────┬──────┘
-                                                    │
-                                             ┌──────▼──────┐
-                                             │ PostgreSQL  │
-                                             │   (v15)     │
-                                             └─────────────┘
+                                                   │
+                                            HTTP + Headers
+                                                   │
+                                            ┌──────▼──────┐
+                                            │  Keycloak   │
+                                            │   (v24)     │
+                                            └──────┬──────┘
+                                                   │
+                                            ┌──────▼──────┐
+                                            │ PostgreSQL  │
+                                            │   (v15)     │
+                                            └─────────────┘
 ```
 
 ## Project Structure
@@ -37,6 +38,7 @@ A demonstration project showing how to configure Keycloak v24 with X.509 certifi
 ```
 keycloak_x509_demo/
 ├── docker-compose.yml          # Main orchestration file
+├── Makefile                    # Build and test commands
 ├── keycloak/
 │   ├── realm-config/           # Realm configuration as code
 │   │   └── x509-realm.json     # Complete realm definition
@@ -44,6 +46,7 @@ keycloak_x509_demo/
 │   │   └── x509-cert-api/      # Certificate management API (Maven project)
 │   ├── themes/                 # Custom themes (optional)
 │   └── conf/                   # Additional configuration
+│       └── quarkus.properties  # Keycloak Quarkus settings
 ├── nginx/
 │   ├── nginx.conf              # Main Nginx configuration
 │   └── conf.d/
@@ -56,10 +59,13 @@ keycloak_x509_demo/
 ├── scripts/
 │   ├── setup.sh                # Main setup script
 │   ├── generate-certs.sh       # Certificate generation
-│   ├── build-provider.sh       # Build custom provider
-│   ├── test-api.sh             # Test certificate API
-│   └── test-cert-auth.sh       # Test certificate authentication
-└── docs/                       # Additional documentation
+│   └── build-provider.sh       # Build custom provider
+└── tests/
+    ├── test-all.sh             # Run all tests
+    ├── test-health.sh          # Infrastructure health tests
+    ├── test-setup.sh           # Test setup (register certificates)
+    ├── test-api.sh             # Certificate API tests
+    └── test-cert-auth.sh       # Certificate authentication tests
 ```
 
 ## Quick Start
@@ -73,27 +79,105 @@ keycloak_x509_demo/
 
 ### Setup
 
-1. **Clone and setup:**
-   ```bash
-   cd keycloak_x509_demo
-   chmod +x scripts/*.sh
-   ./scripts/setup.sh
-   ```
+```bash
+# Complete setup (generates certs, builds provider, starts services)
+make setup
 
-   This will:
-   - Generate CA, server, and client certificates
-   - Build the custom Keycloak provider
-   - Start all Docker services
-   - Import the realm configuration
+# Or step by step:
+make certs      # Generate certificates
+make build      # Build custom provider
+make start      # Start Docker services
+```
 
-2. **Access Keycloak:**
-   - Admin Console: https://localhost/admin
-   - Username: `admin`
-   - Password: `admin`
+### Access Points
 
-3. **Test user credentials:**
-   - Username: `testuser`
-   - Password: `testuser123`
+| URL | Description |
+|-----|-------------|
+| https://localhost/admin | Keycloak Admin Console |
+| https://localhost/realms/x509-demo/account | User Account Console |
+| https://localhost/realms/x509-demo/x509-cert-api/certificates | Certificate API |
+
+### Credentials
+
+| User | Password | Description |
+|------|----------|-------------|
+| admin | admin | Keycloak admin |
+| testuser | testuser123 | Test user with certificate |
+
+## Makefile Commands
+
+```bash
+make setup          # Complete setup (certs + build + start)
+make certs          # Generate certificates only
+make build          # Build custom Keycloak provider
+make start          # Start Docker services
+make stop           # Stop Docker services
+make restart        # Restart Docker services
+make logs           # View all logs
+make logs-keycloak  # View Keycloak logs
+make logs-nginx     # View Nginx logs
+make clean          # Remove all generated files
+
+# Testing
+make test           # Run all tests
+make test-health    # Test infrastructure health
+make test-setup     # Register test certificates
+make test-api       # Test certificate management API
+make test-cert      # Test certificate authentication
+
+# Browser testing (macOS)
+make import-certs   # Import certs to macOS Keychain
+make remove-certs   # Remove certs from macOS Keychain
+
+# Utilities
+make export-realm   # Export realm from running Keycloak
+make shell-keycloak # Open shell in Keycloak container
+make shell-nginx    # Open shell in Nginx container
+make new-client     # Generate new client certificate
+make help           # Show all available commands
+```
+
+## Testing
+
+Run the complete test suite:
+
+```bash
+make test
+```
+
+The test suite includes:
+
+### Infrastructure Health Tests (10 tests)
+- Keycloak accessibility
+- Realm configuration
+- OIDC endpoints
+- Nginx SSL termination
+- Custom X509 API provider
+- Database connectivity
+- OAuth client configuration
+- Test user existence
+- X.509 browser flow
+- Certificate files
+
+### Certificate API Tests (10 tests)
+- Authentication and token retrieval
+- List certificates endpoint
+- Unauthorized access rejection
+- Add certificate
+- Verify certificate
+- Invalid certificate handling
+- Empty certificate rejection
+- Duplicate certificate rejection
+- Certificate info in response
+- Token x509 claims
+
+### Certificate Authentication Tests (6 tests)
+- TLS connection with client certificate
+- Nginx certificate forwarding
+- Authentication flow with certificate
+- Keycloak certificate processing
+- Login page without certificate
+- Unregistered certificate handling
 
 ## Certificate Management API
 
@@ -150,12 +234,28 @@ curl -sk "https://localhost/realms/x509-demo/x509-cert-api/certificates" \
 
 2. **User authenticates with certificate:**
    - Browser presents client certificate
-   - Nginx forwards certificate to Keycloak
+   - Nginx forwards certificate to Keycloak via headers
    - Custom authenticator extracts fingerprint
    - Looks up user by fingerprint in attributes
    - User authenticated without password
 
 ## Browser Setup for Certificate Authentication
+
+### macOS
+
+```bash
+# Import certificates to Keychain (recommended)
+make import-certs
+
+# Or manually:
+# 1. Import CA as trusted root (requires sudo)
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/ca/ca.crt.pem
+
+# 2. Import client certificate
+security import certs/client/testuser/client.p12 -k ~/Library/Keychains/login.keychain-db -P changeit -A
+```
+
+### Other Systems
 
 1. **Import CA certificate:**
    - File: `certs/ca/ca.crt.pem`
@@ -165,10 +265,12 @@ curl -sk "https://localhost/realms/x509-demo/x509-cert-api/certificates" \
    - File: `certs/client/testuser/client.p12`
    - Password: `changeit`
 
-3. **Test authentication:**
-   - Visit: https://localhost/realms/x509-demo/account
-   - Browser should prompt for certificate selection
-   - Select your imported certificate
+### Test Authentication
+
+1. Visit: https://localhost/realms/x509-demo/account
+2. Browser should prompt for certificate selection
+3. Select your imported certificate
+4. You should be logged in automatically
 
 ## Configuration as Code
 
@@ -178,19 +280,18 @@ The realm configuration in `keycloak/realm-config/x509-realm.json` includes:
 - **Roles:** `user`, `admin`, `cert-manager`
 - **Users:** Pre-configured test users with attributes
 - **Clients:** `x509-demo-app` (public app), `cert-api-client` (service account)
-- **Authentication flows:** Custom X.509 browser flow
+- **Authentication flows:** Custom X.509 browser flow with certificate-based authenticator
 - **Protocol mappers:** Include certificate attributes in tokens
+- **User profile:** Custom attributes for certificate storage
 
 ### Modifying Configuration
 
 1. Edit `keycloak/realm-config/x509-realm.json`
-2. Restart Keycloak: `docker-compose restart keycloak`
+2. Restart Keycloak: `make restart`
 
 Or export from running Keycloak:
 ```bash
-docker exec keycloak /opt/keycloak/bin/kc.sh export \
-    --dir /opt/keycloak/data/export \
-    --realm x509-demo
+make export-realm
 ```
 
 ## Custom Provider Development
@@ -200,23 +301,25 @@ The X.509 Certificate API is implemented as a Keycloak SPI (Service Provider Int
 ### Building
 
 ```bash
-./scripts/build-provider.sh
-docker-compose restart keycloak
+make build
+make restart
 ```
 
 ### Key Components
 
-- `X509CertificateResource.java` - REST endpoints
-- `X509CertificateResourceProvider.java` - Provider implementation
-- `X509CertificateResourceProviderFactory.java` - Factory for Keycloak
-- `X509UserAttributeAuthenticator.java` - Custom authenticator
-- `X509UserAttributeAuthenticatorFactory.java` - Authenticator factory
+| File | Description |
+|------|-------------|
+| `X509CertificateResource.java` | REST endpoints for certificate management |
+| `X509CertificateResourceProvider.java` | Provider implementation |
+| `X509CertificateResourceProviderFactory.java` | Factory for Keycloak |
+| `X509UserAttributeAuthenticator.java` | Custom authenticator for certificate lookup |
+| `X509UserAttributeAuthenticatorFactory.java` | Authenticator factory |
 
 ### Adding New Endpoints
 
 1. Add method to `X509CertificateResource.java`
-2. Rebuild: `./scripts/build-provider.sh`
-3. Restart Keycloak
+2. Rebuild: `make build`
+3. Restart: `make restart`
 
 ## Security Considerations
 
@@ -225,6 +328,7 @@ docker-compose restart keycloak
 - **Key storage:** Protect private keys appropriately
 - **Rate limiting:** Add rate limiting to certificate API
 - **Audit logging:** Monitor certificate additions/removals
+- **HTTPS:** Always use HTTPS in production
 
 ## Troubleshooting
 
@@ -232,16 +336,16 @@ docker-compose restart keycloak
 
 Check Nginx logs:
 ```bash
-docker-compose logs nginx
+make logs-nginx
 ```
 
-Verify SSL client certificate headers are being set.
+Look for `ssl_client_verify="SUCCESS"` in the logs.
 
 ### Keycloak not starting
 
 Check Keycloak logs:
 ```bash
-docker-compose logs keycloak
+make logs-keycloak
 ```
 
 Common issues:
@@ -251,19 +355,31 @@ Common issues:
 
 ### Cannot authenticate with certificate
 
-1. Verify certificate is registered in user attributes
-2. Check certificate fingerprint matches
-3. Ensure authentication flow is configured correctly
+1. Run tests to verify setup: `make test`
+2. Verify certificate is registered: Check user attributes in Keycloak admin
+3. Check certificate fingerprint matches
+4. Ensure authentication flow is configured correctly
 
-## Scripts Reference
+### macOS Keychain import fails
 
-| Script | Description |
-|--------|-------------|
-| `setup.sh` | Complete setup (certs + build + start) |
-| `generate-certs.sh` | Generate all certificates |
-| `build-provider.sh` | Build custom Keycloak provider |
-| `test-api.sh` | Test certificate management API |
-| `test-cert-auth.sh` | Test certificate authentication |
+If you see "MAC verification failed":
+```bash
+# Regenerate PKCS12 with legacy algorithms
+make import-certs
+```
+
+### Tests failing
+
+```bash
+# Check if services are running
+make logs
+
+# Restart services
+make restart
+
+# Run tests again
+make test
+```
 
 ## License
 
