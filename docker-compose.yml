@@ -47,11 +47,10 @@ services:
       KC_FEATURES: preview
 
       # Logging
-      KC_LOG_LEVEL: INFO
+      KC_LOG_LEVEL: INFO,com.example.keycloak:DEBUG,org.keycloak.services.x509:DEBUG
 
       # X.509 Certificate Lookup from Nginx headers
       KC_SPI_X509CERT_LOOKUP_PROVIDER: nginx
-      KC_SPI_X509CERT_LOOKUP_NGINX_SSL_CLIENT_CERT: SSL_CLIENT_CERT
 
     command:
       - start-dev

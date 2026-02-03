@@ -46,13 +46,17 @@ clean:
 	@rm -f keycloak/providers/*.jar
 	@rm -rf keycloak/providers/x509-cert-api/target/
 
+# Run all tests
+test:
+	@./tests/test-all.sh
+
 # Test certificate API
 test-api:
-	@./scripts/test-api.sh
+	@./tests/test-api.sh
 
 # Test certificate authentication
 test-cert:
-	@./scripts/test-cert-auth.sh
+	@./tests/test-cert-auth.sh
 
 # Generate new client certificate
 new-client:
@@ -122,6 +126,7 @@ help:
 	@echo "  make logs-keycloak - View Keycloak logs"
 	@echo "  make logs-nginx   - View Nginx logs"
 	@echo "  make clean        - Remove all generated files"
+	@echo "  make test         - Run all tests"
 	@echo "  make test-api     - Test certificate management API"
 	@echo "  make test-cert    - Test certificate authentication"
 	@echo "  make export-realm - Export realm from running Keycloak"
