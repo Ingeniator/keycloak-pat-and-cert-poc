@@ -249,7 +249,27 @@ For a detailed explanation of how X.509 authentication works, including the role
 - **Private key NEVER leaves the user's machine** - only used for TLS signatures
 - **Server only stores public certificate and fingerprint** - no secrets to steal
 - **TLS handshake proves identity** - browser cryptographically proves private key ownership
+- **Self-signed certificates supported** - like GitHub SSH keys, no CA required
 - Similar to GitHub SSH keys - upload public key, authenticate with private key
+
+## Generating Your Own Certificate
+
+Users can generate self-signed certificates like SSH keys:
+
+```bash
+# Generate certificate (like ssh-keygen)
+make gen-cert
+
+# Or specify output directory and identity
+./scripts/generate-self-signed-cert.sh ~/.x509 "John Doe" "john@example.com"
+```
+
+This creates:
+- `private.key.pem` - Keep secret (like `~/.ssh/id_rsa`)
+- `certificate.pem` - Upload to API (like `~/.ssh/id_rsa.pub`)
+- `certificate.p12` - Import to browser
+
+Then register with Keycloak and import to your browser (see script output for commands).
 
 ## Browser Setup for Certificate Authentication
 

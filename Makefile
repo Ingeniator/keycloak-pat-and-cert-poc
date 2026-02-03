@@ -66,11 +66,36 @@ test-health:
 test-setup:
 	@./tests/test-setup.sh
 
-# Generate new client certificate
+# Generate new client certificate (CA-signed)
 new-client:
 	@read -p "Enter username: " user && \
 	read -p "Enter email: " email && \
 	./scripts/generate-client-cert.sh "$$user" "$$email"
+
+# Generate self-signed certificate (like ssh-keygen)
+gen-cert:
+	@./scripts/generate-self-signed-cert.sh
+
+# Register self-signed certificate (~/.x509/certificate.pem) for testuser
+register-cert:
+	@echo "Registering certificate for testuser..."
+	@TOKEN=$$(curl -sk -X POST 'https://localhost/realms/x509-demo/protocol/openid-connect/token' \
+		-d 'grant_type=password&client_id=x509-demo-app&client_secret=demo-app-secret&username=testuser&password=testuser123' \
+		| grep -o '"access_token":"[^"]*"' | cut -d'"' -f4) && \
+	CERT=$$(cat ~/.x509/certificate.pem | awk '{printf "%s\\n", $$0}') && \
+	RESPONSE=$$(curl -sk -X POST 'https://localhost/realms/x509-demo/x509-cert-api/certificates' \
+		-H "Authorization: Bearer $$TOKEN" \
+		-H 'Content-Type: application/json' \
+		-d "{\"certificate\": \"$$CERT\", \"title\": \"Self-Signed Certificate\"}") && \
+	if echo "$$RESPONSE" | grep -q '"fingerprint"'; then \
+		echo "Certificate registered successfully!"; \
+		echo "$$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$$RESPONSE"; \
+	elif echo "$$RESPONSE" | grep -q 'already'; then \
+		echo "Certificate already registered."; \
+	else \
+		echo "Failed to register: $$RESPONSE"; \
+		exit 1; \
+	fi
 
 # Export realm from running Keycloak
 export-realm:
@@ -142,6 +167,8 @@ help:
 	@echo "  make export-realm - Export realm from running Keycloak"
 	@echo "  make shell-keycloak - Open shell in Keycloak container"
 	@echo "  make shell-nginx  - Open shell in Nginx container"
+	@echo "  make gen-cert     - Generate self-signed certificate (like ssh-keygen)"
+	@echo "  make register-cert - Register ~/.x509/certificate.pem for testuser"
 	@echo "  make import-certs - Import certs to macOS Keychain (for browser testing)"
 	@echo "  make remove-certs - Remove certs from macOS Keychain"
 	@echo ""

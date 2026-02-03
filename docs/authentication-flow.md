@@ -196,10 +196,115 @@ This project's flow is similar to GitHub's SSH key management:
 | GitHub SSH | This Project (X.509) |
 |------------|---------------------|
 | User generates SSH key pair | User generates X.509 certificate |
+| `ssh-keygen -t rsa` | `make gen-cert` or `openssl` |
 | Uploads public key to GitHub | Uploads public certificate to API |
 | GitHub stores public key | Keycloak stores cert fingerprint |
 | SSH client uses private key | Browser uses private key (TLS) |
 | Server verifies signature | Nginx verifies signature |
+| No CA required | No CA required (self-signed OK) |
+
+## Trust Models: CA-Signed vs Self-Signed
+
+This project supports two trust models:
+
+### Model 1: Self-Signed Certificates (Default - Like SSH)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  TRUST = Registration                                           │
+│                                                                 │
+│  User generates self-signed cert  ──▶  Uploads to API           │
+│  (like ssh-keygen)                     (like GitHub SSH keys)   │
+│                                                                 │
+│  Trust is based on: "This fingerprint belongs to this user"     │
+│  CA verification: NONE (ssl_verify_client optional_no_ca)       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Nginx config:** `ssl_verify_client optional_no_ca`
+
+**Pros:**
+- Users can generate their own certificates (no PKI infrastructure needed)
+- Simple like SSH keys
+- Users control their own key pairs
+
+**Cons:**
+- No revocation checking (CRL/OCSP)
+- No centralized certificate management
+- Must trust user's certificate generation
+
+### Model 2: CA-Signed Certificates (Enterprise)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  TRUST = CA Signature + Registration                            │
+│                                                                 │
+│  CA signs user's cert  ──▶  User uploads to API                 │
+│  (corporate PKI)            (registers with account)            │
+│                                                                 │
+│  Trust is based on: "CA vouches for identity" + "fingerprint    │
+│                      belongs to this user"                      │
+│  CA verification: YES (ssl_verify_client optional)              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Nginx config:** `ssl_verify_client optional`
+
+**Pros:**
+- CA can verify user identity before issuing cert
+- Supports revocation (CRL/OCSP)
+- Centralized certificate lifecycle management
+
+**Cons:**
+- Requires PKI infrastructure
+- More complex setup
+- Users depend on CA for certificates
+
+### Switching Between Models
+
+Edit `nginx/conf.d/keycloak.conf`:
+
+```nginx
+# Self-signed (like SSH keys) - DEFAULT
+ssl_verify_client optional_no_ca;
+
+# CA-signed only (enterprise)
+ssl_verify_client optional;
+```
+
+Then restart: `make restart`
+
+## Generating Self-Signed Certificates
+
+Users can generate their own certificates like SSH keys:
+
+```bash
+# Using the provided script (recommended)
+make gen-cert
+
+# Or manually with openssl
+openssl genrsa -out private.key.pem 4096
+openssl req -new -x509 -key private.key.pem -out certificate.pem -days 365 \
+    -subj "/CN=Your Name/emailAddress=you@example.com"
+
+# Create PKCS12 for browser
+openssl pkcs12 -export -out certificate.p12 \
+    -inkey private.key.pem -in certificate.pem -legacy -passout pass:changeit
+```
+
+### Using keytool (Java)
+
+```bash
+# Generate key pair and self-signed certificate
+keytool -genkeypair -alias mycert -keyalg RSA -keysize 4096 \
+    -validity 365 -keystore keystore.p12 -storetype PKCS12 \
+    -dname "CN=Your Name, EMAIL=you@example.com" \
+    -storepass changeit
+
+# Export certificate (to upload to API)
+keytool -exportcert -alias mycert -keystore keystore.p12 \
+    -storetype PKCS12 -storepass changeit -rfc -file certificate.pem
+```
 
 ## File Types in This Project
 
