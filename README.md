@@ -227,17 +227,29 @@ curl -sk "https://localhost/realms/x509-demo/x509-cert-api/certificates" \
 
 ## Certificate Authentication Flow
 
+For a detailed explanation of how X.509 authentication works, including the role of public and private keys, see [docs/authentication-flow.md](docs/authentication-flow.md).
+
+### Quick Overview
+
 1. **User registers certificate via API:**
    - Authenticates with password
-   - Uploads their X.509 certificate
-   - Certificate fingerprint stored in user attributes
+   - Uploads their **public certificate** (private key stays on their machine)
+   - Certificate fingerprint (SHA-256 hash) stored in user attributes
 
 2. **User authenticates with certificate:**
-   - Browser presents client certificate
-   - Nginx forwards certificate to Keycloak via headers
-   - Custom authenticator extracts fingerprint
+   - Browser presents client certificate during TLS handshake
+   - Browser proves private key ownership via cryptographic signature
+   - Nginx verifies signature and forwards public cert to Keycloak
+   - Custom authenticator extracts fingerprint from certificate
    - Looks up user by fingerprint in attributes
    - User authenticated without password
+
+### Key Security Points
+
+- **Private key NEVER leaves the user's machine** - only used for TLS signatures
+- **Server only stores public certificate and fingerprint** - no secrets to steal
+- **TLS handshake proves identity** - browser cryptographically proves private key ownership
+- Similar to GitHub SSH keys - upload public key, authenticate with private key
 
 ## Browser Setup for Certificate Authentication
 
