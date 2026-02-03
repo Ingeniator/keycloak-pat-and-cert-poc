@@ -1,4 +1,4 @@
-.PHONY: all setup certs build start stop restart logs clean test-api test-cert help
+.PHONY: all setup certs build start stop restart logs clean test test-health test-setup test-api test-cert help
 
 # Default target
 all: setup
@@ -57,6 +57,14 @@ test-api:
 # Test certificate authentication
 test-cert:
 	@./tests/test-cert-auth.sh
+
+# Test infrastructure health
+test-health:
+	@./tests/test-health.sh
+
+# Test setup (register certificates)
+test-setup:
+	@./tests/test-setup.sh
 
 # Generate new client certificate
 new-client:
@@ -127,6 +135,8 @@ help:
 	@echo "  make logs-nginx   - View Nginx logs"
 	@echo "  make clean        - Remove all generated files"
 	@echo "  make test         - Run all tests"
+	@echo "  make test-health  - Test infrastructure health"
+	@echo "  make test-setup   - Register test certificates"
 	@echo "  make test-api     - Test certificate management API"
 	@echo "  make test-cert    - Test certificate authentication"
 	@echo "  make export-realm - Export realm from running Keycloak"

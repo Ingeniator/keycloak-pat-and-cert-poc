@@ -133,23 +133,21 @@ ADMIN_CERT="$PROJECT_ROOT/certs/client/admin/client.crt.pem"
 ADMIN_KEY="$PROJECT_ROOT/certs/client/admin/client.key.pem"
 
 if [ -f "$ADMIN_CERT" ] && [ -f "$ADMIN_KEY" ]; then
-    # Check if admin cert is registered
+    # Check if admin user can get a token (meaning they exist)
     ADMIN_TOKEN=$(curl -sk -X POST "$BASE_URL/realms/$REALM/protocol/openid-connect/token" \
-        -d "grant_type=password&client_id=x509-demo-app&client_secret=demo-app-secret&username=admin&password=admin123" \
-        | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
+        -d "grant_type=password&client_id=x509-demo-app&client_secret=demo-app-secret&username=admin&password=admin123" 2>/dev/null \
+        | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
 
     if [ -z "$ADMIN_TOKEN" ]; then
-        # Admin user might not have certificate registered, this should fail auth
-        RESPONSE=$(curl -sk -w "\n%{http_code}" \
+        # Admin user doesn't exist or wrong password, test with their cert
+        RESPONSE=$(curl -sk -D - -o /dev/null \
             --cert "$ADMIN_CERT" \
             --key "$ADMIN_KEY" \
             --cacert "$CA_FILE" \
             "$BASE_URL/realms/$REALM/protocol/openid-connect/auth?client_id=account-console&redirect_uri=https%3A%2F%2Flocalhost%2Frealms%2Fx509-demo%2Faccount%2F&response_type=code&scope=openid&code_challenge=$CODE_CHALLENGE&code_challenge_method=S256")
 
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
-        # Should show login page (200) not redirect with code (302)
-        if [ "$HTTP_CODE" = "200" ]; then
+        # Should show login page (200 OK) not redirect with code
+        if echo "$RESPONSE" | grep -q "HTTP/1.1 200"; then
             pass "Unregistered certificate does not auto-authenticate"
         else
             skip "Admin certificate might be registered"

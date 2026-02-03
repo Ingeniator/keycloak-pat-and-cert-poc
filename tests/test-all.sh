@@ -29,6 +29,30 @@ fi
 echo -e "${GREEN}Services are running${NC}"
 echo ""
 
+# Run health tests first
+echo -e "${BLUE}Running Infrastructure Health Tests...${NC}"
+echo ""
+if "$SCRIPT_DIR/test-health.sh"; then
+    echo -e "${GREEN}Health tests passed${NC}"
+else
+    echo -e "${RED}Health tests failed${NC}"
+    FAILED=1
+fi
+
+echo ""
+
+# Run setup to ensure certificates are registered
+echo -e "${BLUE}Running Test Setup...${NC}"
+echo ""
+if "$SCRIPT_DIR/test-setup.sh"; then
+    echo -e "${GREEN}Setup completed${NC}"
+else
+    echo -e "${RED}Setup failed${NC}"
+    exit 1
+fi
+
+echo ""
+
 # Run API tests
 echo -e "${BLUE}Running API Tests...${NC}"
 echo ""

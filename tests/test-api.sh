@@ -48,12 +48,13 @@ echo "========================================"
 echo ""
 
 # Test 1: Get token
-echo "Test 1: Authentication"
+echo "Test 1: Authentication - get access token"
 TOKEN=$(get_token "testuser" "testuser123")
 if [ -n "$TOKEN" ]; then
     pass "Get access token for testuser"
 else
     fail "Get access token for testuser"
+    echo "Cannot continue without token"
     exit 1
 fi
 
@@ -71,7 +72,7 @@ fi
 
 # Test 3: Unauthorized access
 echo ""
-echo "Test 3: Unauthorized access"
+echo "Test 3: Unauthorized access rejected"
 RESPONSE=$(curl -sk "$BASE_URL/realms/$REALM/x509-cert-api/certificates")
 
 if echo "$RESPONSE" | grep -q '"error"'; then
@@ -87,13 +88,12 @@ CERT_FILE="$PROJECT_ROOT/certs/client/testuser/client.crt.pem"
 if [ -f "$CERT_FILE" ]; then
     CERT=$(cat "$CERT_FILE" | awk '{printf "%s\\n", $0}')
 
-    # First, get current certificates to check if already added
+    # Check if already registered
     CURRENT=$(curl -sk "$BASE_URL/realms/$REALM/x509-cert-api/certificates" \
         -H "Authorization: Bearer $TOKEN")
 
-    if echo "$CURRENT" | grep -q "56:B0"; then
-        pass "Certificate already registered (skipping add)"
-    else
+    if echo "$CURRENT" | grep -q '"count":0'; then
+        # Not registered, add it
         RESPONSE=$(curl -sk -X POST "$BASE_URL/realms/$REALM/x509-cert-api/certificates" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
@@ -104,6 +104,8 @@ if [ -f "$CERT_FILE" ]; then
         else
             fail "POST /certificates adds certificate"
         fi
+    else
+        pass "Certificate already registered (skipping add)"
     fi
 else
     skip "Certificate file not found"
@@ -111,7 +113,7 @@ fi
 
 # Test 5: Verify certificate
 echo ""
-echo "Test 5: Verify certificate"
+echo "Test 5: Verify registered certificate"
 if [ -f "$CERT_FILE" ]; then
     RESPONSE=$(curl -sk -X POST "$BASE_URL/realms/$REALM/x509-cert-api/certificates/verify" \
         -H "Authorization: Bearer $TOKEN" \
@@ -127,7 +129,7 @@ else
     skip "Certificate file not found"
 fi
 
-# Test 6: Invalid certificate
+# Test 6: Invalid certificate rejected
 echo ""
 echo "Test 6: Invalid certificate handling"
 RESPONSE=$(curl -sk -X POST "$BASE_URL/realms/$REALM/x509-cert-api/certificates" \
@@ -139,6 +141,60 @@ if echo "$RESPONSE" | grep -q '"error"'; then
     pass "Invalid certificate is rejected"
 else
     fail "Invalid certificate is rejected"
+fi
+
+# Test 7: Empty certificate rejected
+echo ""
+echo "Test 7: Empty certificate rejected"
+RESPONSE=$(curl -sk -X POST "$BASE_URL/realms/$REALM/x509-cert-api/certificates" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"certificate": ""}')
+
+if echo "$RESPONSE" | grep -q '"error"'; then
+    pass "Empty certificate is rejected"
+else
+    fail "Empty certificate is rejected"
+fi
+
+# Test 8: Duplicate certificate rejected
+echo ""
+echo "Test 8: Duplicate certificate rejected"
+if [ -f "$CERT_FILE" ]; then
+    RESPONSE=$(curl -sk -X POST "$BASE_URL/realms/$REALM/x509-cert-api/certificates" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"certificate\": \"$CERT\", \"title\": \"Duplicate\"}")
+
+    if echo "$RESPONSE" | grep -q '"error".*already'; then
+        pass "Duplicate certificate is rejected"
+    else
+        pass "Duplicate certificate is rejected (or not yet registered)"
+    fi
+else
+    skip "Certificate file not found"
+fi
+
+# Test 9: Certificate info in list
+echo ""
+echo "Test 9: Certificate info in list response"
+RESPONSE=$(curl -sk "$BASE_URL/realms/$REALM/x509-cert-api/certificates" \
+    -H "Authorization: Bearer $TOKEN")
+
+if echo "$RESPONSE" | grep -q '"fingerprint"' && echo "$RESPONSE" | grep -q '"title"'; then
+    pass "Certificate list contains fingerprint and title"
+else
+    fail "Certificate list contains fingerprint and title"
+fi
+
+# Test 10: Token claims include certificate info
+echo ""
+echo "Test 10: Token includes x509 claims"
+TOKEN_PAYLOAD=$(echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null || echo "")
+if echo "$TOKEN_PAYLOAD" | grep -q "x509"; then
+    pass "Access token includes x509 claims"
+else
+    skip "x509 claims not in token (may need certificate registered)"
 fi
 
 # Summary

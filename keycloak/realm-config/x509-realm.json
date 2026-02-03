@@ -44,6 +44,7 @@
     {
       "username": "testuser",
       "enabled": true,
+      "emailVerified": true,
       "email": "testuser@example.com",
       "firstName": "Test",
       "lastName": "User",
@@ -54,15 +55,12 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["user", "cert-manager"],
-      "attributes": {
-        "x509_certificate_public_key": [],
-        "x509_certificate_subject_dn": []
-      }
+      "realmRoles": ["user", "cert-manager"]
     },
     {
       "username": "admin",
       "enabled": true,
+      "emailVerified": true,
       "email": "admin@example.com",
       "firstName": "Admin",
       "lastName": "User",
@@ -73,11 +71,7 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["user", "admin", "cert-manager"],
-      "attributes": {
-        "x509_certificate_public_key": [],
-        "x509_certificate_subject_dn": []
-      }
+      "realmRoles": ["user", "admin", "cert-manager"]
     }
   ],
   "clients": [
@@ -219,6 +213,14 @@
       "builtIn": false,
       "authenticationExecutions": [
         {
+          "authenticator": "x509-user-attribute-authenticator",
+          "authenticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 5,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false
+        },
+        {
           "authenticator": "auth-x509-client-username-form",
           "authenticatorFlow": false,
           "requirement": "ALTERNATIVE",
@@ -257,92 +259,11 @@
   "attributes": {
     "frontendUrl": "https://localhost",
     "acr.loa.map": "{\"gold\":\"2\",\"silver\":\"1\"}",
-    "x509-certificate-lookup-enabled": "true"
+    "userProfileEnabled": "true"
   },
   "userManagedAccessAllowed": true,
   "eventsEnabled": true,
   "eventsListeners": ["jboss-logging"],
-  "enabledEventTypes": [
-    "SEND_RESET_PASSWORD",
-    "UPDATE_CONSENT_ERROR",
-    "GRANT_CONSENT",
-    "REMOVE_TOTP",
-    "REVOKE_GRANT",
-    "UPDATE_TOTP",
-    "LOGIN_ERROR",
-    "CLIENT_LOGIN",
-    "RESET_PASSWORD_ERROR",
-    "IMPERSONATE_ERROR",
-    "CODE_TO_TOKEN_ERROR",
-    "CUSTOM_REQUIRED_ACTION",
-    "RESTART_AUTHENTICATION",
-    "IMPERSONATE",
-    "UPDATE_PROFILE_ERROR",
-    "LOGIN",
-    "UPDATE_PASSWORD_ERROR",
-    "CLIENT_INITIATED_ACCOUNT_LINKING",
-    "TOKEN_EXCHANGE",
-    "LOGOUT",
-    "REGISTER",
-    "DELETE_ACCOUNT_ERROR",
-    "CLIENT_REGISTER",
-    "IDENTITY_PROVIDER_LINK_ACCOUNT",
-    "DELETE_ACCOUNT",
-    "UPDATE_PASSWORD",
-    "FEDERATED_IDENTITY_LINK_ERROR",
-    "CLIENT_DELETE",
-    "IDENTITY_PROVIDER_FIRST_LOGIN",
-    "VERIFY_EMAIL",
-    "CLIENT_DELETE_ERROR",
-    "CLIENT_LOGIN_ERROR",
-    "RESTART_AUTHENTICATION_ERROR",
-    "EXECUTE_ACTIONS_ERROR",
-    "REMOVE_FEDERATED_IDENTITY_ERROR",
-    "TOKEN_EXCHANGE_ERROR",
-    "PERMISSION_TOKEN",
-    "SEND_IDENTITY_PROVIDER_LINK_ERROR",
-    "EXECUTE_ACTION_TOKEN_ERROR",
-    "SEND_VERIFY_EMAIL",
-    "OAUTH2_DEVICE_CODE_TO_TOKEN_ERROR",
-    "EXECUTE_ACTIONS",
-    "REMOVE_FEDERATED_IDENTITY",
-    "OAUTH2_DEVICE_VERIFY_USER_CODE",
-    "IDENTITY_PROVIDER_POST_LOGIN",
-    "IDENTITY_PROVIDER_LINK_ACCOUNT_ERROR",
-    "UPDATE_EMAIL",
-    "OAUTH2_DEVICE_AUTH",
-    "REGISTER_ERROR",
-    "REVOKE_GRANT_ERROR",
-    "LOGOUT_ERROR",
-    "UPDATE_EMAIL_ERROR",
-    "EXECUTE_ACTION_TOKEN",
-    "CLIENT_UPDATE_ERROR",
-    "UPDATE_PROFILE",
-    "AUTHREQID_TO_TOKEN",
-    "FEDERATED_IDENTITY_LINK",
-    "CLIENT_REGISTER_ERROR",
-    "SEND_VERIFY_EMAIL_ERROR",
-    "SEND_IDENTITY_PROVIDER_LINK",
-    "RESET_PASSWORD",
-    "CLIENT_INITIATED_ACCOUNT_LINKING_ERROR",
-    "OAUTH2_DEVICE_VERIFY_USER_CODE_ERROR",
-    "UPDATE_CONSENT",
-    "REMOVE_TOTP_ERROR",
-    "VERIFY_EMAIL_ERROR",
-    "SEND_RESET_PASSWORD_ERROR",
-    "CLIENT_UPDATE",
-    "IDENTITY_PROVIDER_POST_LOGIN_ERROR",
-    "CUSTOM_REQUIRED_ACTION_ERROR",
-    "UPDATE_TOTP_ERROR",
-    "CODE_TO_TOKEN",
-    "OAUTH2_DEVICE_AUTH_ERROR",
-    "VERIFY_PROFILE_ERROR",
-    "GRANT_CONSENT_ERROR",
-    "IDENTITY_PROVIDER_FIRST_LOGIN_ERROR",
-    "PERMISSION_TOKEN_ERROR",
-    "AUTHREQID_TO_TOKEN_ERROR",
-    "VERIFY_PROFILE"
-  ],
   "adminEventsEnabled": true,
   "adminEventsDetailsEnabled": true
 }
