@@ -1,0 +1,132 @@
+.PHONY: all setup certs build start stop restart logs clean test-api test-cert help
+
+# Default target
+all: setup
+
+# Complete setup
+setup:
+	@./scripts/setup.sh
+
+# Generate certificates only
+certs:
+	@./scripts/generate-certs.sh
+
+# Build custom provider
+build:
+	@./scripts/build-provider.sh
+
+# Start services
+start:
+	@docker-compose up -d
+
+# Stop services
+stop:
+	@docker-compose down
+
+# Restart services
+restart:
+	@docker-compose restart
+
+# View logs
+logs:
+	@docker-compose logs -f
+
+# View Keycloak logs
+logs-keycloak:
+	@docker-compose logs -f keycloak
+
+# View Nginx logs
+logs-nginx:
+	@docker-compose logs -f nginx
+
+# Clean everything
+clean:
+	@docker-compose down -v
+	@rm -rf certs/
+	@rm -f keycloak/providers/*.jar
+	@rm -rf keycloak/providers/x509-cert-api/target/
+
+# Test certificate API
+test-api:
+	@./scripts/test-api.sh
+
+# Test certificate authentication
+test-cert:
+	@./scripts/test-cert-auth.sh
+
+# Generate new client certificate
+new-client:
+	@read -p "Enter username: " user && \
+	read -p "Enter email: " email && \
+	./scripts/generate-client-cert.sh "$$user" "$$email"
+
+# Export realm from running Keycloak
+export-realm:
+	@docker exec keycloak /opt/keycloak/bin/kc.sh export \
+		--dir /opt/keycloak/data/export \
+		--realm x509-demo
+	@docker cp keycloak:/opt/keycloak/data/export/x509-demo-realm.json ./keycloak/realm-config/
+
+# Shell into Keycloak container
+shell-keycloak:
+	@docker exec -it keycloak /bin/bash
+
+# Shell into Nginx container
+shell-nginx:
+	@docker exec -it nginx-proxy /bin/sh
+
+# Import certificates to macOS Keychain for browser testing
+import-certs:
+	@echo "Regenerating PKCS12 with legacy algorithms..."
+	@openssl pkcs12 -export \
+		-out certs/client/testuser/client.p12 \
+		-inkey certs/client/testuser/client.key.pem \
+		-in certs/client/testuser/client.crt.pem \
+		-certfile certs/ca/ca.crt.pem \
+		-legacy \
+		-passout pass:changeit
+	@openssl pkcs12 -export \
+		-out certs/client/admin/client.p12 \
+		-inkey certs/client/admin/client.key.pem \
+		-in certs/client/admin/client.crt.pem \
+		-certfile certs/ca/ca.crt.pem \
+		-legacy \
+		-passout pass:changeit
+	@echo "Importing CA certificate as trusted (requires sudo)..."
+	sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/ca/ca.crt.pem
+	@echo "Importing client certificate..."
+	security import certs/client/testuser/client.p12 -k ~/Library/Keychains/login.keychain-db -P changeit -A
+	@echo ""
+	@echo "Certificates imported successfully!"
+	@echo "Visit: https://localhost/realms/x509-demo/account"
+
+# Remove certificates from macOS Keychain
+remove-certs:
+	@echo "Removing Demo CA from System Keychain (requires sudo)..."
+	-sudo security delete-certificate -c "Demo CA" /Library/Keychains/System.keychain 2>/dev/null || true
+	@echo "Removing client certificate from login Keychain..."
+	-security delete-certificate -c "testuser" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+	@echo "Certificates removed."
+
+# Help
+help:
+	@echo "Keycloak X.509 Demo - Available targets:"
+	@echo ""
+	@echo "  make setup        - Complete setup (certs + build + start)"
+	@echo "  make certs        - Generate certificates only"
+	@echo "  make build        - Build custom Keycloak provider"
+	@echo "  make start        - Start Docker services"
+	@echo "  make stop         - Stop Docker services"
+	@echo "  make restart      - Restart Docker services"
+	@echo "  make logs         - View all logs"
+	@echo "  make logs-keycloak - View Keycloak logs"
+	@echo "  make logs-nginx   - View Nginx logs"
+	@echo "  make clean        - Remove all generated files"
+	@echo "  make test-api     - Test certificate management API"
+	@echo "  make test-cert    - Test certificate authentication"
+	@echo "  make export-realm - Export realm from running Keycloak"
+	@echo "  make shell-keycloak - Open shell in Keycloak container"
+	@echo "  make shell-nginx  - Open shell in Nginx container"
+	@echo "  make import-certs - Import certs to macOS Keychain (for browser testing)"
+	@echo "  make remove-certs - Remove certs from macOS Keychain"
+	@echo ""

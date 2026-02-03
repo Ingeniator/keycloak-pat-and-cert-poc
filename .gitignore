@@ -1,0 +1,35 @@
+# Certificates (sensitive - don't commit to public repos)
+certs/
+*.pem
+*.p12
+*.jks
+*.csr
+
+# Build artifacts
+keycloak/providers/*.jar
+keycloak/providers/x509-cert-api/target/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+postgres_data/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.bak
