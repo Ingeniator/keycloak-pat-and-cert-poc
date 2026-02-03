@@ -274,6 +274,124 @@ ssl_verify_client optional;
 
 Then restart: `make restart`
 
+## Email Fallback Authentication
+
+The authenticator supports **email fallback** for CA-signed certificates. This allows users with certificates from a trusted CA to authenticate without pre-registering their certificate, as long as the email in the certificate matches their Keycloak user email.
+
+### How It Works
+
+```
+Certificate presented
+        │
+        ▼
+┌───────────────────────────────────────┐
+│ 1. Fingerprint lookup                 │
+│    Found? ──────────────────────────────▶ Authenticate ✓
+│    (works for self-signed & CA-signed)│
+└───────────────────┬───────────────────┘
+                    │ (not found)
+                    ▼
+┌───────────────────────────────────────┐
+│ 2. Email fallback enabled?            │
+│    No? ─────────────────────────────────▶ Reject ✗
+└───────────────────┬───────────────────┘
+                    │ (yes)
+                    ▼
+┌───────────────────────────────────────┐
+│ 3. Certificate signed by trusted CA?  │
+│    No? ─────────────────────────────────▶ Reject ✗
+│    (self-signed certs blocked here)   │
+└───────────────────┬───────────────────┘
+                    │ (yes)
+                    ▼
+┌───────────────────────────────────────┐
+│ 4. Extract email from certificate     │
+│    - Subject Alternative Name (SAN)   │
+│    - Subject DN (emailAddress field)  │
+└───────────────────┬───────────────────┘
+                    │
+                    ▼
+┌───────────────────────────────────────┐
+│ 5. Find user by email in Keycloak     │
+│    Not found? ──────────────────────────▶ Reject ✗
+└───────────────────┬───────────────────┘
+                    │ (found)
+                    ▼
+┌───────────────────────────────────────┐
+│ 6. Auto-register fingerprint          │
+│    (for faster future logins)         │
+└───────────────────┬───────────────────┘
+                    │
+                    ▼
+              Authenticate ✓
+```
+
+### Configuration
+
+#### Environment Variable (Recommended)
+
+Set the path to your trusted CA certificate file:
+
+```bash
+# In docker-compose.yml
+services:
+  keycloak:
+    environment:
+      X509_TRUSTED_CA_CERT_PATH: /opt/keycloak/conf/trusted-ca.pem
+    volumes:
+      - ./certs/ca/ca.crt.pem:/opt/keycloak/conf/trusted-ca.pem:ro
+```
+
+The file can contain multiple PEM-encoded certificates (concatenated).
+
+#### Authenticator Configuration (Alternative)
+
+In the Keycloak Admin Console:
+
+1. Go to **Authentication** → **Flows** → your X509 flow
+2. Click the gear icon on the authenticator
+3. Configure:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| **Enable Email Fallback** | `true` | Allow email-based lookup for CA-signed certs |
+| **Auto-register Certificate** | `true` | Store fingerprint after email match for faster future logins |
+| **Trusted CA Certificate(s)** | (empty) | Inline PEM (only if env var not set) |
+
+### Security Considerations
+
+| Certificate Type | Fingerprint Auth | Email Fallback |
+|-----------------|------------------|----------------|
+| Self-signed | Yes (must pre-register) | No (blocked) |
+| CA-signed (trusted) | Yes | Yes |
+| CA-signed (untrusted) | Yes (must pre-register) | No (blocked) |
+
+**Why block email fallback for self-signed certs?**
+
+Anyone can create a self-signed certificate with any email address. Without CA verification, a malicious user could create a certificate with `admin@company.com` and gain access.
+
+With a trusted CA, the CA is responsible for verifying the user's identity and email ownership before issuing the certificate.
+
+### Example: Corporate PKI Setup
+
+```yaml
+# docker-compose.yml
+services:
+  keycloak:
+    environment:
+      # Path to corporate CA certificate
+      X509_TRUSTED_CA_CERT_PATH: /opt/keycloak/conf/corporate-ca.pem
+    volumes:
+      # Mount the CA certificate
+      - ./certs/corporate-ca.pem:/opt/keycloak/conf/corporate-ca.pem:ro
+```
+
+With this setup:
+1. Employees with corporate-issued certificates can log in immediately
+2. Their email in the certificate is matched to their Keycloak account
+3. Certificate fingerprint is auto-registered for faster future logins
+4. Self-signed certificates still work if pre-registered via the API
+
 ## Generating Self-Signed Certificates
 
 Users can generate their own certificates like SSH keys:
@@ -353,7 +471,20 @@ public void authenticate(AuthenticationFlowContext context) {
     // 3. Search for user with matching fingerprint
     UserModel user = findUserByFingerprint(fingerprint);
 
-    // 4. If found, authenticate the user
+    // 4. Email fallback: if no user found and cert is CA-signed
+    if (user == null && isEmailFallbackEnabled()) {
+        if (isCertificateSignedByTrustedCA(clientCert)) {
+            String email = extractEmailFromCertificate(clientCert);
+            user = session.users().getUserByEmail(realm, email);
+
+            // Auto-register fingerprint for future logins
+            if (user != null && isAutoRegisterEnabled()) {
+                autoRegisterCertificate(user, fingerprint);
+            }
+        }
+    }
+
+    // 5. If found, authenticate the user
     context.setUser(user);
     context.success();
 

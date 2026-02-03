@@ -54,6 +54,10 @@ services:
       KC_SPI_X509CERT_LOOKUP_NGINX_SSL_CLIENT_CERT: SSL_CLIENT_CERT
       KC_SPI_X509CERT_LOOKUP_NGINX_SSL_CERT_CHAIN_PREFIX: SSL_CLIENT_CERT_CHAIN
 
+      # Trusted CA for email fallback authentication (optional)
+      # If set, users with CA-signed certs can authenticate by email without pre-registering
+      X509_TRUSTED_CA_CERT_PATH: /opt/keycloak/certs/ca/ca.crt.pem
+
     command:
       - start-dev
       - --import-realm
