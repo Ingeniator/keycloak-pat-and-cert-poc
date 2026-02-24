@@ -1,0 +1,56 @@
+# Migration: 002_x509-client-mappers
+# Description: Add X.509 certificate claims to existing clients
+# Author: DevOps Team
+# Date: 2024-01-02
+#
+# This migration adds protocol mappers to include certificate info in tokens.
+# Apply to clients that need certificate information in JWT claims.
+#
+# Rollback: Remove the protocol mappers from client configuration
+
+realm: "$(env:REALM_NAME:-x509-demo)"
+
+# Update existing client with X.509 mappers
+# This is idempotent - existing mappers with same name will be updated
+clients:
+  - clientId: "$(env:CLIENT_ID:-x509-demo-app)"
+    # Only specify what needs to change - other settings preserved
+    protocolMappers:
+      # Map certificate fingerprint to token claim
+      - name: "x509-fingerprint-mapper"
+        protocol: "openid-connect"
+        protocolMapper: "oidc-usermodel-attribute-mapper"
+        consentRequired: false
+        config:
+          userinfo.token.claim: "true"
+          user.attribute: "x509_certificate_fingerprint"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          claim.name: "x509_fingerprint"
+          jsonType.label: "String"
+
+      # Map certificate subject DN to token claim
+      - name: "x509-subject-dn-mapper"
+        protocol: "openid-connect"
+        protocolMapper: "oidc-usermodel-attribute-mapper"
+        consentRequired: false
+        config:
+          userinfo.token.claim: "true"
+          user.attribute: "x509_certificate_subject_dn"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          claim.name: "x509_subject_dn"
+          jsonType.label: "String"
+
+      # Map certificate serial number
+      - name: "x509-serial-mapper"
+        protocol: "openid-connect"
+        protocolMapper: "oidc-usermodel-attribute-mapper"
+        consentRequired: false
+        config:
+          userinfo.token.claim: "true"
+          user.attribute: "x509_certificate_serial"
+          id.token.claim: "false"
+          access.token.claim: "true"
+          claim.name: "x509_serial"
+          jsonType.label: "String"

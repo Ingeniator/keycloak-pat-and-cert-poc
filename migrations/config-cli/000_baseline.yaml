@@ -1,0 +1,172 @@
+# Migration: 000_baseline
+# Description: Full realm baseline — single source of truth for the x509-demo realm
+# Author: DevOps Team
+# Date: 2024-01-01
+#
+# This migration defines the complete realm configuration:
+# - Realm settings (display name, SSL, brute force, registration, etc.)
+# - Roles (user, admin, cert-manager)
+# - Users (testuser, admin) with credentials and role mappings
+# - Clients (x509-demo-app with protocol mappers, cert-api-client)
+# - Realm attributes (frontendUrl, acr.loa.map, userProfileEnabled)
+# - Events config
+#
+# Auth flows and additional client mappers are in subsequent migrations.
+
+realm: "$(env:REALM_NAME:-x509-demo)"
+enabled: true
+displayName: "X.509 Certificate Demo"
+displayNameHtml: "<strong>X.509 Certificate Demo</strong>"
+
+# SSL / login settings
+sslRequired: "external"
+registrationAllowed: true
+registrationEmailAsUsername: false
+rememberMe: true
+verifyEmail: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: true
+editUsernameAllowed: false
+
+# Brute force protection
+bruteForceProtected: true
+permanentLockout: false
+maxFailureWaitSeconds: 900
+minimumQuickLoginWaitSeconds: 60
+waitIncrementSeconds: 60
+quickLoginCheckMilliSeconds: 1000
+maxDeltaTimeSeconds: 43200
+failureFactor: 5
+
+# Realm attributes
+attributes:
+  frontendUrl: "https://localhost"
+  acr.loa.map: '{"gold":"2","silver":"1"}'
+  userProfileEnabled: "true"
+
+userManagedAccessAllowed: true
+
+# Events
+eventsEnabled: true
+eventsListeners:
+  - "jboss-logging"
+adminEventsEnabled: true
+adminEventsDetailsEnabled: true
+
+# Roles
+roles:
+  realm:
+    - name: "user"
+      description: "Regular user role"
+    - name: "admin"
+      description: "Administrator role"
+    - name: "cert-manager"
+      description: "Can manage own certificates"
+
+# Users
+users:
+  - username: "testuser"
+    enabled: true
+    emailVerified: true
+    email: "testuser@example.com"
+    firstName: "Test"
+    lastName: "User"
+    credentials:
+      - type: "password"
+        value: "testuser123"
+        temporary: false
+    realmRoles:
+      - "user"
+      - "cert-manager"
+
+  - username: "admin"
+    enabled: true
+    emailVerified: true
+    email: "admin@example.com"
+    firstName: "Admin"
+    lastName: "User"
+    credentials:
+      - type: "password"
+        value: "admin123"
+        temporary: false
+    realmRoles:
+      - "user"
+      - "admin"
+      - "cert-manager"
+
+# Clients
+clients:
+  - clientId: "$(env:CLIENT_ID:-x509-demo-app)"
+    name: "X.509 Demo Application"
+    description: "Demo application for X.509 certificate authentication"
+    enabled: true
+    clientAuthenticatorType: "client-secret"
+    secret: "demo-app-secret"
+    redirectUris:
+      - "http://localhost:8080/*"
+      - "https://localhost/*"
+      - "https://keycloak.local/*"
+    webOrigins:
+      - "http://localhost:8080"
+      - "https://localhost"
+      - "https://keycloak.local"
+    publicClient: false
+    protocol: "openid-connect"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: true
+    serviceAccountsEnabled: false
+    authorizationServicesEnabled: false
+    fullScopeAllowed: true
+    defaultClientScopes:
+      - "web-origins"
+      - "acr"
+      - "profile"
+      - "roles"
+      - "email"
+    optionalClientScopes:
+      - "address"
+      - "phone"
+      - "offline_access"
+      - "microprofile-jwt"
+    protocolMappers:
+      - name: "x509-public-key-mapper"
+        protocol: "openid-connect"
+        protocolMapper: "oidc-usermodel-attribute-mapper"
+        consentRequired: false
+        config:
+          userinfo.token.claim: "true"
+          user.attribute: "x509_certificate_public_key"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          claim.name: "x509_public_key"
+          jsonType.label: "String"
+          multivalued: "true"
+      - name: "x509-subject-dn-mapper"
+        protocol: "openid-connect"
+        protocolMapper: "oidc-usermodel-attribute-mapper"
+        consentRequired: false
+        config:
+          userinfo.token.claim: "true"
+          user.attribute: "x509_certificate_subject_dn"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          claim.name: "x509_subject_dn"
+          jsonType.label: "String"
+          multivalued: "true"
+
+  - clientId: "cert-api-client"
+    name: "Certificate API Client"
+    description: "Service account for certificate management API"
+    enabled: true
+    clientAuthenticatorType: "client-secret"
+    secret: "cert-api-secret"
+    publicClient: false
+    protocol: "openid-connect"
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: true
+    authorizationServicesEnabled: false
+    fullScopeAllowed: true
