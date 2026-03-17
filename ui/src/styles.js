@@ -1,0 +1,88 @@
+const styles = {
+  container: {
+    maxWidth: 640,
+    margin: "40px auto",
+    padding: "0 16px",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  heading: {
+    margin: 0,
+    fontSize: 24,
+    fontWeight: 600,
+  },
+  subheading: {
+    margin: "0 0 16px",
+    fontSize: 18,
+    fontWeight: 600,
+  },
+  card: {
+    background: "#fff",
+    border: "1px solid #e0e0e0",
+    borderRadius: 8,
+    padding: 24,
+    marginBottom: 16,
+  },
+  button: {
+    background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    padding: "10px 20px",
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: "pointer",
+  },
+  buttonOutline: {
+    background: "transparent",
+    color: "#666",
+    border: "1px solid #d0d0d0",
+    borderRadius: 6,
+    padding: "8px 16px",
+    fontSize: 14,
+    cursor: "pointer",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+  },
+  tdLabel: {
+    padding: "8px 12px 8px 0",
+    color: "#666",
+    fontSize: 14,
+    whiteSpace: "nowrap",
+    verticalAlign: "top",
+    borderBottom: "1px solid #f0f0f0",
+  },
+  tdValue: {
+    padding: "8px 0",
+    fontSize: 14,
+    wordBreak: "break-all",
+    borderBottom: "1px solid #f0f0f0",
+  },
+  pre: {
+    background: "#f5f5f5",
+    padding: 16,
+    borderRadius: 6,
+    fontSize: 12,
+    overflow: "auto",
+    maxHeight: 300,
+  },
+  textarea: {
+    width: "100%",
+    fontFamily: "monospace",
+    fontSize: 13,
+    padding: 12,
+    border: "1px solid #d0d0d0",
+    borderRadius: 6,
+    resize: "vertical",
+    boxSizing: "border-box",
+  },
+};
+
+export default styles;

@@ -58,6 +58,9 @@ services:
       # If set, users with CA-signed certs can authenticate by email without pre-registering
       X509_TRUSTED_CA_CERT_PATH: /opt/keycloak/certs/ca/ca.crt.pem
 
+    ports:
+      - "8080:8080"
+
     command:
       - start-dev
       - --spi-x509cert-lookup-nginx-ssl-client-cert=SSL_CLIENT_CERT
@@ -85,7 +88,7 @@ services:
       start_period: 60s
 
   keycloak-config-cli:
-    image: adorsys/keycloak-config-cli:5.12.0-25.0.1
+    image: adorsys/keycloak-config-cli:6.5.0-24
     container_name: keycloak-config-cli
     environment:
       KEYCLOAK_URL: http://keycloak:8080
@@ -99,6 +102,17 @@ services:
       CLIENT_ID: ${CLIENT_ID:-x509-demo-app}
     volumes:
       - ./migrations/config-cli:/config:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-network
+
+  ui:
+    build: ./ui
+    container_name: keycloak-ui
+    ports:
+      - "5173:80"
     depends_on:
       keycloak:
         condition: service_healthy

@@ -1,0 +1,193 @@
+# Migration: 003_public-realm
+# Description: Public realm with OIDC client for React SPA authentication
+# Author: DevOps Team
+# Date: 2026-03-17
+
+realm: "public"
+enabled: true
+displayName: "Public"
+
+# Login settings
+sslRequired: "external"
+registrationAllowed: true
+registrationEmailAsUsername: false
+rememberMe: true
+verifyEmail: false
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+resetPasswordAllowed: true
+editUsernameAllowed: false
+
+# Brute force protection
+bruteForceProtected: true
+permanentLockout: false
+maxFailureWaitSeconds: 900
+minimumQuickLoginWaitSeconds: 60
+waitIncrementSeconds: 60
+failureFactor: 5
+
+# Token lifespans
+accessTokenLifespan: 300
+ssoSessionIdleTimeout: 1800
+ssoSessionMaxLifespan: 36000
+
+# User profile — allow public_key attribute
+attributes:
+  userProfileEnabled: "true"
+
+userProfile:
+  attributes:
+    - name: "username"
+      displayName: "${username}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          min: 3
+          max: 255
+        username-prohibited-characters: {}
+        up-username-not-idn-homograph: {}
+    - name: "email"
+      displayName: "${email}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        email: {}
+        length:
+          max: 255
+    - name: "firstName"
+      displayName: "${firstName}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+    - name: "lastName"
+      displayName: "${lastName}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+    - name: "x509_certificate_fingerprint"
+      displayName: "Certificate Fingerprint"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 1024
+
+# Authentication flows — X.509 certificate login
+authenticationFlows:
+  # Subflow: certificate or password
+  - alias: "public-browser-forms"
+    description: "X.509 certificate or username/password"
+    providerId: "basic-flow"
+    topLevel: false
+    builtIn: false
+    authenticationExecutions:
+      # Custom authenticator: fingerprint match OR trusted-CA email fallback
+      - authenticator: "x509-user-attribute-authenticator"
+        authenticatorFlow: false
+        requirement: "ALTERNATIVE"
+        priority: 0
+        authenticatorConfig: "public-x509-fingerprint-config"
+      # Fallback: username/password
+      - authenticator: "auth-username-password-form"
+        authenticatorFlow: false
+        requirement: "ALTERNATIVE"
+        priority: 1
+
+  # Main browser flow
+  - alias: "public-browser-flow"
+    description: "Browser flow with X.509 certificate option"
+    providerId: "basic-flow"
+    topLevel: true
+    builtIn: false
+    authenticationExecutions:
+      - authenticator: "auth-cookie"
+        authenticatorFlow: false
+        requirement: "ALTERNATIVE"
+        priority: 0
+      - authenticatorFlow: true
+        requirement: "ALTERNATIVE"
+        priority: 1
+        flowAlias: "public-browser-forms"
+
+authenticatorConfig:
+  - alias: "public-x509-fingerprint-config"
+    config:
+      # Match by public key fingerprint stored in user attributes
+      emailFallbackEnabled: "true"
+      # If cert is signed by trusted CA and email matches a user, auto-register the fingerprint
+      autoRegisterCertOnEmailMatch: "true"
+
+# Bind as default browser flow
+browserFlow: "public-browser-flow"
+
+# Roles
+roles:
+  realm:
+    - name: "user"
+      description: "Regular user"
+    - name: "admin"
+      description: "Administrator"
+
+# Users
+users:
+  - username: "testuser"
+    enabled: true
+    emailVerified: true
+    email: "testuser@example.com"
+    firstName: "Test"
+    lastName: "User"
+    credentials:
+      - type: "password"
+        value: "testuser123"
+        temporary: false
+    realmRoles:
+      - "user"
+
+# React SPA client (public client with PKCE)
+clients:
+  - clientId: "ui"
+    name: "React UI"
+    description: "Public client for React SPA authentication"
+    enabled: true
+    publicClient: true
+    protocol: "openid-connect"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: true
+
+    # PKCE enforcement
+    attributes:
+      pkce.code.challenge.method: "S256"
+
+    redirectUris:
+      - "http://localhost:5173/*"
+      - "https://localhost/ui/*"
+
+    webOrigins:
+      - "http://localhost:5173"
+      - "https://localhost"
+
+    defaultClientScopes:
+      - "web-origins"
+      - "acr"
+      - "profile"
+      - "roles"
+      - "email"
+    optionalClientScopes:
+      - "address"
+      - "phone"
+      - "offline_access"

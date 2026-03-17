@@ -116,7 +116,7 @@ jobs:
             -e KEYCLOAK_PASSWORD=${{ secrets.KEYCLOAK_PASSWORD }} \
             -e REALM_NAME=production \
             -v ${{ github.workspace }}/migrations/config-cli:/config \
-            adorsys/keycloak-config-cli:5.12.0-25.0.1
+            adorsys/keycloak-config-cli:6.5.0-24
 ```
 
 ## Alternative approaches

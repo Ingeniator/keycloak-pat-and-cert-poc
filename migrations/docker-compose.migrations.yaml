@@ -11,7 +11,7 @@
 services:
   # Watch mode for development - re-applies on file changes
   keycloak-config-cli-watch:
-    image: adorsys/keycloak-config-cli:5.12.0-25.0.1
+    image: adorsys/keycloak-config-cli:6.5.0-24
     environment:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_USER: ${KEYCLOAK_ADMIN:-admin}
