@@ -1,6 +1,7 @@
 import { useAuth } from "react-oidc-context";
 import TokenInfo from "./TokenInfo";
 import PublicKeyForm from "./PublicKeyForm";
+import HelloApi from "./HelloApi";
 import styles from "./styles";
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
         </button>
       </div>
       <TokenInfo user={auth.user} />
+      <HelloApi token={auth.user.access_token} />
       <PublicKeyForm token={auth.user.access_token} />
     </div>
   );

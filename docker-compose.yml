@@ -108,6 +108,18 @@ services:
     networks:
       - keycloak-network
 
+  backend:
+    build: ./backend
+    container_name: keycloak-backend
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      REALM: public
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-network
+
   ui:
     build: ./ui
     container_name: keycloak-ui
