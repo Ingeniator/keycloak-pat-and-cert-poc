@@ -155,13 +155,15 @@ users:
     realmRoles:
       - "user"
 
-# React SPA client (public client with PKCE)
+# Confidential client for nginx OIDC module (phantom token pattern)
 clients:
-  - clientId: "ui"
-    name: "React UI"
-    description: "Public client for React SPA authentication"
+  - clientId: "ui-bff"
+    name: "UI Backend-for-Frontend"
+    description: "Confidential client for phantom token pattern"
     enabled: true
-    publicClient: true
+    publicClient: false
+    clientAuthenticatorType: "client-secret"
+    secret: "bff-secret"
     protocol: "openid-connect"
     standardFlowEnabled: true
     implicitFlowEnabled: false
@@ -169,16 +171,14 @@ clients:
     serviceAccountsEnabled: false
     fullScopeAllowed: true
 
-    # PKCE enforcement
+    # Lightweight access token — small JWT to client, full claims via introspection
     attributes:
-      pkce.code.challenge.method: "S256"
+      access.token.lightweight: "true"
 
     redirectUris:
-      - "http://localhost:5173/*"
-      - "https://localhost/ui/*"
+      - "https://localhost/auth/callback"
 
     webOrigins:
-      - "http://localhost:5173"
       - "https://localhost"
 
     defaultClientScopes:

@@ -1,55 +1,26 @@
 import express from "express";
-import jwt from "jsonwebtoken";
-import jwksClient from "jwks-rsa";
 
 const PORT = process.env.PORT || 3001;
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || "http://keycloak:8080";
-const KEYCLOAK_EXTERNAL_URL = process.env.KEYCLOAK_EXTERNAL_URL || "https://localhost";
 const REALM = process.env.REALM || "public";
 
 const app = express();
+app.use(express.json());
 
-// JWKS client — fetches Keycloak's public keys to verify tokens
-const client = jwksClient({
-  jwksUri: `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/certs`,
-  cache: true,
-  rateLimit: true,
-});
-
-function getKey(header, callback) {
-  client.getSigningKey(header.kid, (err, key) => {
-    if (err) return callback(err);
-    callback(null, key.getPublicKey());
-  });
-}
-
-// Auth middleware — verifies Bearer token against Keycloak
+// Auth middleware — reads full claims injected by nginx (from introspection)
+// Falls back to Authorization header for direct access
 function requireAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or invalid Authorization header" });
+  const claimsHeader = req.headers["x-token-claims"];
+  if (claimsHeader) {
+    try {
+      req.user = JSON.parse(claimsHeader);
+      return next();
+    } catch (e) {
+      return res.status(400).json({ error: "Invalid X-Token-Claims header" });
+    }
   }
 
-  const token = authHeader.slice(7);
-
-  jwt.verify(
-    token,
-    getKey,
-    {
-      issuer: [
-        `${KEYCLOAK_URL}/realms/${REALM}`,
-        `${KEYCLOAK_EXTERNAL_URL}/realms/${REALM}`,
-      ],
-      algorithms: ["RS256"],
-    },
-    (err, decoded) => {
-      if (err) {
-        return res.status(401).json({ error: "Invalid token", details: err.message });
-      }
-      req.user = decoded;
-      next();
-    }
-  );
+  return res.status(401).json({ error: "Not authenticated — request must go through the gateway" });
 }
 
 // Protected endpoint
@@ -58,8 +29,42 @@ app.get("/hello", requireAuth, (req, res) => {
     message: `Hello, ${req.user.preferred_username || req.user.sub}!`,
     sub: req.user.sub,
     email: req.user.email,
+    roles: req.user.realm_access?.roles,
     issued_at: new Date(req.user.iat * 1000).toISOString(),
   });
+});
+
+// Proxy Keycloak Account API
+app.get("/account", requireAuth, async (req, res) => {
+  try {
+    const kcRes = await fetch(`${KEYCLOAK_URL}/realms/${REALM}/account`, {
+      headers: {
+        Authorization: req.headers.authorization,
+        Accept: "application/json",
+      },
+    });
+    res.status(kcRes.status).json(await kcRes.json());
+  } catch (e) {
+    res.status(502).json({ error: "Failed to reach Keycloak", details: e.message });
+  }
+});
+
+app.post("/account", requireAuth, async (req, res) => {
+  try {
+    const kcRes = await fetch(`${KEYCLOAK_URL}/realms/${REALM}/account`, {
+      method: "POST",
+      headers: {
+        Authorization: req.headers.authorization,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(req.body),
+    });
+    if (kcRes.status === 204) return res.status(204).end();
+    res.status(kcRes.status).json(await kcRes.json());
+  } catch (e) {
+    res.status(502).json({ error: "Failed to reach Keycloak", details: e.message });
+  }
 });
 
 app.listen(PORT, () => {

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import styles from "./styles";
 
-export default function HelloApi({ token }) {
+const API = "/api";
+
+export default function HelloApi() {
   const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -12,16 +14,10 @@ export default function HelloApi({ token }) {
     setResponse(null);
 
     try {
-      const res = await fetch("https://localhost/api/hello", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
+      const res = await fetch(`${API}/hello`, { credentials: "include" });
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setResponse(data);
     } catch (e) {
       setError(e.message);
@@ -34,7 +30,8 @@ export default function HelloApi({ token }) {
     <div style={styles.card}>
       <h2 style={styles.subheading}>Backend API</h2>
       <p style={{ color: "#666", fontSize: 14, marginBottom: 12 }}>
-        Call the protected <code>/hello</code> endpoint with your access token.
+        Call the protected <code>/hello</code> endpoint. Your session cookie
+        authenticates the request — no token is sent from the browser.
       </p>
 
       <button style={styles.button} onClick={callHello} disabled={loading}>

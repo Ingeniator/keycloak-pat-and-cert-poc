@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import styles from "./styles";
 
-const KC_URL = "https://localhost";
-const REALM = "public";
+const API = "/api";
 const ATTR_FINGERPRINT = "x509_certificate_fingerprint";
 
 /**
@@ -10,7 +9,6 @@ const ATTR_FINGERPRINT = "x509_certificate_fingerprint";
  * matching the Java authenticator: colon-separated uppercase hex.
  */
 async function computeCertFingerprint(pemString) {
-  // Strip PEM headers and decode base64 → DER bytes
   const b64 = pemString
     .replace(/-----BEGIN CERTIFICATE-----/, "")
     .replace(/-----END CERTIFICATE-----/, "")
@@ -23,7 +21,7 @@ async function computeCertFingerprint(pemString) {
     .join(":");
 }
 
-export default function PublicKeyForm({ token }) {
+export default function PublicKeyForm({ user }) {
   const [fingerprints, setFingerprints] = useState([]);
   const [certPem, setCertPem] = useState("");
   const [saved, setSaved] = useState(false);
@@ -31,14 +29,11 @@ export default function PublicKeyForm({ token }) {
   const [loading, setLoading] = useState(true);
 
   const loadAccount = async () => {
-    const res = await fetch(`${KC_URL}/realms/${REALM}/account`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    });
+    const res = await fetch(`${API}/account`, { credentials: "include" });
     if (!res.ok) throw new Error(`Failed to load account (${res.status})`);
     return res.json();
   };
 
-  // Load existing fingerprints
   useEffect(() => {
     loadAccount()
       .then((data) => {
@@ -47,7 +42,7 @@ export default function PublicKeyForm({ token }) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, []);
 
   const handleAddCert = async () => {
     setSaved(false);
@@ -64,13 +59,10 @@ export default function PublicKeyForm({ token }) {
       const account = await loadAccount();
       const updated = [...fingerprints, fp];
 
-      const res = await fetch(`${KC_URL}/realms/${REALM}/account`, {
+      const res = await fetch(`${API}/account`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...account,
           attributes: {
@@ -100,13 +92,10 @@ export default function PublicKeyForm({ token }) {
       const account = await loadAccount();
       const updated = fingerprints.filter((f) => f !== fp);
 
-      const res = await fetch(`${KC_URL}/realms/${REALM}/account`, {
+      const res = await fetch(`${API}/account`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...account,
           attributes: {

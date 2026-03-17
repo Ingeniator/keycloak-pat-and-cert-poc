@@ -1,41 +1,36 @@
-import { useAuth } from "react-oidc-context";
+import { useState, useEffect } from "react";
 import TokenInfo from "./TokenInfo";
-import PublicKeyForm from "./PublicKeyForm";
 import HelloApi from "./HelloApi";
+import PublicKeyForm from "./PublicKeyForm";
 import styles from "./styles";
 
 export default function App() {
-  const auth = useAuth();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  if (auth.isLoading) {
+  useEffect(() => {
+    fetch("/auth/me", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
     return <div style={styles.container}><p>Loading...</p></div>;
   }
 
-  if (auth.error) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <h2 style={{ color: "#c0392b" }}>Authentication Error</h2>
-          <pre style={styles.pre}>{auth.error.message}</pre>
-          <button style={styles.button} onClick={() => auth.signinRedirect()}>
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!auth.isAuthenticated) {
+  if (!user) {
     return (
       <div style={styles.container}>
         <div style={{ ...styles.card, textAlign: "center" }}>
           <h1 style={styles.heading}>Keycloak Account</h1>
           <p style={{ color: "#666", marginBottom: 24 }}>
-            Sign in to manage your account and public keys.
+            Sign in to manage your account and certificates.
           </p>
-          <button style={styles.button} onClick={() => auth.signinRedirect()}>
+          <a href="/auth/login" style={{ ...styles.button, textDecoration: "none", display: "inline-block" }}>
             Sign in
-          </button>
+          </a>
         </div>
       </div>
     );
@@ -45,13 +40,13 @@ export default function App() {
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={styles.heading}>Account</h1>
-        <button style={styles.buttonOutline} onClick={() => auth.signoutRedirect()}>
+        <a href="/auth/logout" style={{ ...styles.buttonOutline, textDecoration: "none" }}>
           Sign out
-        </button>
+        </a>
       </div>
-      <TokenInfo user={auth.user} />
-      <HelloApi token={auth.user.access_token} />
-      <PublicKeyForm token={auth.user.access_token} />
+      <TokenInfo user={user} />
+      <HelloApi />
+      <PublicKeyForm user={user} />
     </div>
   );
 }
