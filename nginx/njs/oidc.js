@@ -13,9 +13,11 @@ const CLIENT_SECRET = "bff-secret";
 const BASE_URL = "https://localhost";
 const TOKEN_COOKIE = "__token";
 const INTROSPECTION_CACHE_SEC = 30;
+const PAT_CACHE_SEC = 60;
 
 const OIDC_BASE = `${KEYCLOAK_INTERNAL}/realms/${REALM}/protocol/openid-connect`;
 const OIDC_EXTERNAL = `${KEYCLOAK_EXTERNAL}/realms/${REALM}/protocol/openid-connect`;
+const PAT_EXCHANGE_URL = `${KEYCLOAK_INTERNAL}/realms/${REALM}/pat-api/tokens/exchange`;
 
 // ---------------------------------------------------------------------------
 // Cookie helpers
@@ -120,6 +122,36 @@ async function introspect(token) {
 }
 
 // ---------------------------------------------------------------------------
+// PAT exchange — convert personal access token to real Keycloak token
+// ---------------------------------------------------------------------------
+
+async function exchangePat(patToken) {
+  // Check cache: PAT hash → access token
+  var cacheKey = "_pat_" + tokenCacheKey(patToken);
+  var cached = ngx.shared.cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  var resp = await ngx.fetch(PAT_EXCHANGE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: patToken }),
+  });
+
+  if (resp.status !== 200) return null;
+
+  var data = await resp.json();
+  if (!data.access_token) return null;
+
+  // Cache the access token
+  var ttl = Math.min(data.expires_in || 300, PAT_CACHE_SEC);
+  ngx.shared.cache.set(cacheKey, data.access_token, ttl);
+
+  return data.access_token;
+}
+
+// ---------------------------------------------------------------------------
 // Token refresh
 // ---------------------------------------------------------------------------
 
@@ -139,6 +171,26 @@ async function refreshTokens(refreshToken) {
 
   if (resp.status !== 200) return null;
   return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Shared: filter introspection claims for backend headers
+// ---------------------------------------------------------------------------
+
+function filterClaims(claims) {
+  return {
+    sub: claims.sub,
+    preferred_username: claims.preferred_username,
+    email: claims.email,
+    email_verified: claims.email_verified,
+    given_name: claims.given_name,
+    family_name: claims.family_name,
+    realm_access: claims.realm_access,
+    scope: claims.scope,
+    iss: claims.iss,
+    exp: claims.exp,
+    iat: claims.iat,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -214,9 +266,39 @@ function logout(r) {
 
 // ---------------------------------------------------------------------------
 // Auth check — called via auth_request for /api/* routes
+// Supports both cookie-based sessions and PAT-based auth
 // ---------------------------------------------------------------------------
 
 async function resolveToken(r) {
+  // Check for PAT in Authorization header
+  var authHeader = r.headersIn["Authorization"];
+  if (authHeader && authHeader.startsWith("Bearer pat_")) {
+    var patToken = authHeader.substring(7); // strip "Bearer "
+    try {
+      var accessToken = await exchangePat(patToken);
+      if (!accessToken) {
+        r.return(401);
+        return;
+      }
+
+      var claims = await introspect(accessToken);
+      if (!claims) {
+        r.return(401);
+        return;
+      }
+
+      r.headersOut["X-Access-Token"] = accessToken;
+      r.headersOut["X-Token-Claims"] = JSON.stringify(filterClaims(claims));
+      r.return(200);
+      return;
+    } catch (e) {
+      r.error("PAT exchange failed: " + e.message);
+      r.return(401);
+      return;
+    }
+  }
+
+  // Cookie-based session flow
   var tokens = getTokens(r);
   if (!tokens) {
     r.return(401);
@@ -250,22 +332,8 @@ async function resolveToken(r) {
       return;
     }
 
-    var filtered = {
-      sub: claims.sub,
-      preferred_username: claims.preferred_username,
-      email: claims.email,
-      email_verified: claims.email_verified,
-      given_name: claims.given_name,
-      family_name: claims.family_name,
-      realm_access: claims.realm_access,
-      scope: claims.scope,
-      iss: claims.iss,
-      exp: claims.exp,
-      iat: claims.iat,
-    };
-
     r.headersOut["X-Access-Token"] = accessToken;
-    r.headersOut["X-Token-Claims"] = JSON.stringify(filtered);
+    r.headersOut["X-Token-Claims"] = JSON.stringify(filterClaims(claims));
     r.return(200);
   } catch (e) {
     r.error("Introspection failed: " + e.message);

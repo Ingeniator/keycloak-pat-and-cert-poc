@@ -1,4 +1,4 @@
-.PHONY: all setup certs build start stop restart logs clean test test-health test-setup test-api test-cert help
+.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat help
 
 # Default target
 all: setup
@@ -11,9 +11,14 @@ setup:
 certs:
 	@./scripts/generate-certs.sh
 
-# Build custom provider
+# Build custom providers
 build:
 	@./scripts/build-provider.sh
+	@./scripts/build-pat-provider.sh
+
+# Build PAT provider only
+build-pat:
+	@./scripts/build-pat-provider.sh
 
 # Start services
 start:
@@ -45,6 +50,7 @@ clean:
 	@rm -rf certs/
 	@rm -f keycloak/providers/*.jar
 	@rm -rf keycloak/providers/x509-cert-api/target/
+	@rm -rf keycloak/providers/pat-api/target/
 
 # Run all tests
 test:
@@ -57,6 +63,10 @@ test-api:
 # Test certificate authentication
 test-cert:
 	@./tests/test-cert-auth.sh
+
+# Test personal access tokens
+test-pat:
+	@./tests/test-pat.sh
 
 # Test infrastructure health
 test-health:
@@ -164,6 +174,7 @@ help:
 	@echo "  make test-setup   - Register test certificates"
 	@echo "  make test-api     - Test certificate management API"
 	@echo "  make test-cert    - Test certificate authentication"
+	@echo "  make test-pat     - Test personal access tokens"
 	@echo "  make export-realm - Export realm from running Keycloak"
 	@echo "  make shell-keycloak - Open shell in Keycloak container"
 	@echo "  make shell-nginx  - Open shell in Nginx container"

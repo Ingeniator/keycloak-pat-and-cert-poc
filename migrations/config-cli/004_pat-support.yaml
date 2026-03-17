@@ -1,0 +1,135 @@
+# Migration: 004_pat-support
+# Description: Personal Access Token support — user profile attributes and client config
+# Author: DevOps Team
+# Date: 2026-03-17
+
+realm: "public"
+enabled: true
+
+# Extend user profile with PAT attributes
+userProfile:
+  attributes:
+    - name: "username"
+      displayName: "${username}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          min: 3
+          max: 255
+        username-prohibited-characters: {}
+        up-username-not-idn-homograph: {}
+    - name: "email"
+      displayName: "${email}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        email: {}
+        length:
+          max: 255
+    - name: "firstName"
+      displayName: "${firstName}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+    - name: "lastName"
+      displayName: "${lastName}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+    - name: "x509_certificate_fingerprint"
+      displayName: "Certificate Fingerprint"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 1024
+    - name: "pat_id"
+      displayName: "PAT ID"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_name"
+      displayName: "PAT Name"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_hash"
+      displayName: "PAT Hash"
+      permissions:
+        view: ["admin"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_scopes"
+      displayName: "PAT Scopes"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_created_at"
+      displayName: "PAT Created At"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_expires_at"
+      displayName: "PAT Expires At"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_last_used_at"
+      displayName: "PAT Last Used At"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+
+# Enable direct access grants on ui-bff client (for PAT creation via CLI/tests)
+clients:
+  - clientId: "ui-bff"
+    name: "UI Backend-for-Frontend"
+    description: "Confidential client for phantom token pattern"
+    enabled: true
+    publicClient: false
+    clientAuthenticatorType: "client-secret"
+    secret: "bff-secret"
+    protocol: "openid-connect"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: true
+    serviceAccountsEnabled: false
+    fullScopeAllowed: true
+
+    attributes:
+      access.token.lightweight: "true"
+
+    redirectUris:
+      - "https://localhost/auth/callback"
+
+    webOrigins:
+      - "https://localhost"
+
+    defaultClientScopes:
+      - "web-origins"
+      - "acr"
+      - "profile"
+      - "roles"
+      - "email"
+    optionalClientScopes:
+      - "address"
+      - "phone"
+      - "offline_access"

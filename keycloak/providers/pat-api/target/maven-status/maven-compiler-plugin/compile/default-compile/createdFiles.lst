@@ -1,0 +1,5 @@
+com/example/keycloak/pat/spi/PatResourceProviderFactory.class
+com/example/keycloak/pat/rest/PatResource$ExchangeTokenRequest.class
+com/example/keycloak/pat/rest/PatResourceProvider.class
+com/example/keycloak/pat/rest/PatResource.class
+com/example/keycloak/pat/rest/PatResource$CreateTokenRequest.class

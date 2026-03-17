@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import TokenInfo from "./TokenInfo";
 import HelloApi from "./HelloApi";
+import PatManager from "./PatManager";
 import PublicKeyForm from "./PublicKeyForm";
 import styles from "./styles";
 
@@ -46,6 +47,7 @@ export default function App() {
       </div>
       <TokenInfo user={user} />
       <HelloApi />
+      <PatManager user={user} />
       <PublicKeyForm user={user} />
     </div>
   );

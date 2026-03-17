@@ -65,6 +65,18 @@ fi
 
 echo ""
 
+# Run PAT tests
+echo -e "${BLUE}Running Personal Access Token Tests...${NC}"
+echo ""
+if "$SCRIPT_DIR/test-pat.sh"; then
+    echo -e "${GREEN}PAT tests passed${NC}"
+else
+    echo -e "${RED}PAT tests failed${NC}"
+    FAILED=1
+fi
+
+echo ""
+
 # Run Certificate Authentication tests
 echo -e "${BLUE}Running Certificate Authentication Tests...${NC}"
 echo ""
