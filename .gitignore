@@ -33,3 +33,4 @@ postgres_data/
 # Temporary files
 *.tmp
 *.bak
+node_modules/*

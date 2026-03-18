@@ -1,4 +1,4 @@
-.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat help
+.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat test-e2e help
 
 # Default target
 all: setup
@@ -67,6 +67,14 @@ test-cert:
 # Test personal access tokens
 test-pat:
 	@./tests/test-pat.sh
+
+# Run Playwright e2e tests
+test-e2e:
+	@npx playwright test
+
+# Run Playwright e2e tests with browser visible
+test-e2e-headed:
+	@npx playwright test --headed
 
 # Test infrastructure health
 test-health:
@@ -175,6 +183,8 @@ help:
 	@echo "  make test-api     - Test certificate management API"
 	@echo "  make test-cert    - Test certificate authentication"
 	@echo "  make test-pat     - Test personal access tokens"
+	@echo "  make test-e2e     - Run Playwright e2e tests"
+	@echo "  make test-e2e-headed - Run e2e tests with browser visible"
 	@echo "  make export-realm - Export realm from running Keycloak"
 	@echo "  make shell-keycloak - Open shell in Keycloak container"
 	@echo "  make shell-nginx  - Open shell in Nginx container"

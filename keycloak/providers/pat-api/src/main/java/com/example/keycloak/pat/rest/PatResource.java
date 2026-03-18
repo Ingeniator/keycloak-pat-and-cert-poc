@@ -9,6 +9,8 @@ import org.keycloak.protocol.oidc.TokenManager;
 import org.keycloak.services.Urls;
 import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.services.managers.AuthenticationManager;
+import org.keycloak.events.EventBuilder;
+import org.keycloak.events.EventType;
 import org.keycloak.services.util.DefaultClientSessionContext;
 import java.math.BigInteger;
 import java.security.MessageDigest;
@@ -230,11 +232,14 @@ public class PatResource {
                         .build();
             }
 
-            // Create user session
+            // Set client in Keycloak context (required for TokenManager)
+            session.getContext().setClient(client);
+
+            // Create user session (must be persistent for introspection to work)
             UserSessionModel userSession = session.sessions().createUserSession(
                     null, realm, user, user.getUsername(),
                     "127.0.0.1", "pat-exchange", false, null, null,
-                    UserSessionModel.SessionPersistenceState.TRANSIENT);
+                    UserSessionModel.SessionPersistenceState.PERSISTENT);
 
             // Create client session
             AuthenticatedClientSessionModel clientSession =
@@ -244,12 +249,14 @@ public class PatResource {
 
             // Build access token
             TokenManager tokenManager = new TokenManager();
+            EventBuilder event = new EventBuilder(realm, session, session.getContext().getConnection())
+                    .event(EventType.TOKEN_EXCHANGE);
 
             var clientSessionCtx = DefaultClientSessionContext
                     .fromClientSessionScopeParameter(clientSession, session);
 
             TokenManager.AccessTokenResponseBuilder responseBuilder =
-                    tokenManager.responseBuilder(realm, client, null, session, userSession, clientSessionCtx);
+                    tokenManager.responseBuilder(realm, client, event, session, userSession, clientSessionCtx);
             responseBuilder.generateAccessToken();
 
             var tokenResponse = responseBuilder.build();

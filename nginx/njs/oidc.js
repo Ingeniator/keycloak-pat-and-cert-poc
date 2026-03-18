@@ -51,10 +51,11 @@ function getTokens(r) {
 function setTokenCookie(r, tokens) {
   // Store lightweight access token + refresh token in a base64-encoded cookie.
   // The access token is already signed by Keycloak — no need for additional HMAC.
+  // Only store access + refresh tokens. ID token is large and only used for
+  // logout id_token_hint — skip it to keep cookie under the 4KB browser limit.
   var payload = JSON.stringify({
     a: tokens.access_token,
     r: tokens.refresh_token,
-    i: tokens.id_token,
     e: Date.now() + tokens.expires_in * 1000,
   });
   var encoded = Buffer.from(payload).toString("base64");
@@ -139,7 +140,11 @@ async function exchangePat(patToken) {
     body: JSON.stringify({ token: patToken }),
   });
 
-  if (resp.status !== 200) return null;
+  if (resp.status !== 200) {
+    var errText = await resp.text();
+    ngx.log(ngx.ERR, "PAT exchange HTTP " + resp.status + ": " + errText);
+    return null;
+  }
 
   var data = await resp.json();
   if (!data.access_token) return null;
@@ -258,7 +263,7 @@ function logout(r) {
   ];
 
   if (tokens && tokens.i) {
-    params.push("id_token_hint=" + tokens.i);
+    params.push("id_token_hint=" + encodeURIComponent(tokens.i));
   }
 
   r.return(302, OIDC_EXTERNAL + "/logout?" + params.join("&"));
