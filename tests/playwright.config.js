@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [["list"], ["html", { open: "never" }]],
+  outputDir: "./test-results",
+  reporter: [["list"], ["html", { outputFolder: "./test-results/playwright-report", open: "never" }]],
   use: {
     baseURL: "https://localhost",
     ignoreHTTPSErrors: true,

@@ -38,19 +38,23 @@ A demonstration project showing how to configure Keycloak v24 with X.509 certifi
 ```
 keycloak_x509_demo/
 ├── docker-compose.yml          # Main orchestration file
+├── .env.example                # Environment variables template
 ├── Makefile                    # Build and test commands
 ├── keycloak/
-│   ├── realm-config/           # Realm configuration as code
-│   │   └── x509-realm.json     # Complete realm definition
 │   ├── providers/              # Custom Keycloak extensions
-│   │   └── x509-cert-api/      # Certificate management API (Maven project)
-│   ├── themes/                 # Custom themes (optional)
+│   │   ├── x509-cert-api/      # Certificate management API (Maven project)
+│   │   └── pat-api/            # Personal Access Token API (Maven project)
+│   ├── migrations/             # Realm configuration as code
+│   │   ├── config-cli/         # Versioned YAML migrations
+│   │   └── scripts/            # Migration & admin scripts
 │   └── conf/                   # Additional configuration
 │       └── quarkus.properties  # Keycloak Quarkus settings
-├── nginx/
+├── gateway/                    # OIDC gateway (nginx + njs)
 │   ├── nginx.conf              # Main Nginx configuration
-│   └── conf.d/
-│       └── keycloak.conf       # Reverse proxy configuration
+│   ├── conf.d/
+│   │   └── keycloak.conf       # Reverse proxy configuration
+│   └── njs/
+│       └── oidc.js             # Phantom token OIDC handler
 ├── certs/                      # Generated certificates
 │   ├── ca/                     # Certificate Authority
 │   ├── server/                 # Server certificates
@@ -61,11 +65,18 @@ keycloak_x509_demo/
 │   ├── generate-certs.sh       # Certificate generation
 │   └── build-provider.sh       # Build custom provider
 └── tests/
+    ├── package.json            # Playwright dependency
+    ├── playwright.config.js    # Playwright configuration
     ├── test-all.sh             # Run all tests
     ├── test-health.sh          # Infrastructure health tests
     ├── test-setup.sh           # Test setup (register certificates)
     ├── test-api.sh             # Certificate API tests
-    └── test-cert-auth.sh       # Certificate authentication tests
+    ├── test-cert-auth.sh       # Certificate authentication tests
+    ├── test-pat.sh             # Personal Access Token tests
+    └── e2e/                    # Playwright end-to-end tests
+        ├── helpers.js
+        ├── login.spec.js
+        └── pat.spec.js
 ```
 
 ## Quick Start
@@ -80,6 +91,9 @@ keycloak_x509_demo/
 ### Setup
 
 ```bash
+# Copy and customize environment variables (optional — defaults work out of the box)
+cp .env.example .env
+
 # Complete setup (generates certs, builds provider, starts services)
 make setup
 
@@ -115,7 +129,7 @@ make stop           # Stop Docker services
 make restart        # Restart Docker services
 make logs           # View all logs
 make logs-keycloak  # View Keycloak logs
-make logs-nginx     # View Nginx logs
+make logs-gateway   # View Gateway (nginx) logs
 make clean          # Remove all generated files
 
 # Testing
@@ -132,7 +146,7 @@ make remove-certs   # Remove certs from macOS Keychain
 # Utilities
 make export-realm   # Export realm from running Keycloak
 make shell-keycloak # Open shell in Keycloak container
-make shell-nginx    # Open shell in Nginx container
+make shell-gateway  # Open shell in Gateway (nginx) container
 make new-client     # Generate new client certificate
 make help           # Show all available commands
 ```
@@ -368,7 +382,7 @@ make restart
 
 Check Nginx logs:
 ```bash
-make logs-nginx
+make logs-gateway
 ```
 
 Look for `ssl_client_verify="SUCCESS"` in the logs.

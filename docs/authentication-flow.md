@@ -262,7 +262,7 @@ This project supports two trust models:
 
 ### Switching Between Models
 
-Edit `nginx/conf.d/keycloak.conf`:
+Edit `gateway/conf.d/keycloak.conf`:
 
 ```nginx
 # Self-signed (like SSH keys) - DEFAULT

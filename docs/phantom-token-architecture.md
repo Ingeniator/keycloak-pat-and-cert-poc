@@ -23,7 +23,7 @@ Browser (cookie only, no JWT visible)
   └── /ui/*            → static React SPA
 ```
 
-### nginx + njs (`nginx/njs/oidc.js`)
+### nginx + njs (`gateway/njs/oidc.js`)
 
 Handles the full OIDC lifecycle:
 
@@ -73,13 +73,13 @@ A React SPA with no OIDC client libraries:
 ## Adding a new backend
 
 1. Add the service to `docker-compose.yml`
-2. Add an upstream in `nginx/nginx.conf`:
+2. Add an upstream in `gateway/nginx.conf`:
    ```nginx
    upstream my-service {
        server my-service:3000;
    }
    ```
-3. Add a location block in `nginx/conf.d/keycloak.conf`:
+3. Add a location block in `gateway/conf.d/keycloak.conf`:
    ```nginx
    location /my-service/ {
        auth_request /_auth;

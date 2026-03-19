@@ -1,4 +1,4 @@
-.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat test-e2e help
+.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat test-e2e help logs-gateway shell-gateway
 
 # Default target
 all: setup
@@ -40,8 +40,8 @@ logs:
 logs-keycloak:
 	@docker-compose logs -f keycloak
 
-# View Nginx logs
-logs-nginx:
+# View Gateway (nginx) logs
+logs-gateway:
 	@docker-compose logs -f nginx
 
 # Clean everything
@@ -49,8 +49,7 @@ clean:
 	@docker-compose down -v
 	@rm -rf certs/
 	@rm -f keycloak/providers/*.jar
-	@rm -rf keycloak/providers/x509-cert-api/target/
-	@rm -rf keycloak/providers/pat-api/target/
+	@rm -rf keycloak/providers/*/target/
 
 # Run all tests
 test:
@@ -70,11 +69,11 @@ test-pat:
 
 # Run Playwright e2e tests
 test-e2e:
-	@npx playwright test
+	@cd tests && npx playwright test
 
 # Run Playwright e2e tests with browser visible
 test-e2e-headed:
-	@npx playwright test --headed
+	@cd tests && npx playwright test --headed
 
 # Test infrastructure health
 test-health:
@@ -126,8 +125,8 @@ export-realm:
 shell-keycloak:
 	@docker exec -it keycloak /bin/bash
 
-# Shell into Nginx container
-shell-nginx:
+# Shell into Gateway (nginx) container
+shell-gateway:
 	@docker exec -it nginx-proxy /bin/sh
 
 # Import certificates to macOS Keychain for browser testing
@@ -175,7 +174,7 @@ help:
 	@echo "  make restart      - Restart Docker services"
 	@echo "  make logs         - View all logs"
 	@echo "  make logs-keycloak - View Keycloak logs"
-	@echo "  make logs-nginx   - View Nginx logs"
+	@echo "  make logs-gateway - View Gateway (nginx) logs"
 	@echo "  make clean        - Remove all generated files"
 	@echo "  make test         - Run all tests"
 	@echo "  make test-health  - Test infrastructure health"
@@ -187,7 +186,7 @@ help:
 	@echo "  make test-e2e-headed - Run e2e tests with browser visible"
 	@echo "  make export-realm - Export realm from running Keycloak"
 	@echo "  make shell-keycloak - Open shell in Keycloak container"
-	@echo "  make shell-nginx  - Open shell in Nginx container"
+	@echo "  make shell-gateway - Open shell in Gateway (nginx) container"
 	@echo "  make gen-cert     - Generate self-signed certificate (like ssh-keygen)"
 	@echo "  make register-cert - Register ~/.x509/certificate.pem for testuser"
 	@echo "  make import-certs - Import certs to macOS Keychain (for browser testing)"

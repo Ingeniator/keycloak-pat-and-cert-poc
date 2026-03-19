@@ -7,7 +7,7 @@ certs/
 
 # Build artifacts
 keycloak/providers/*.jar
-keycloak/providers/x509-cert-api/target/
+keycloak/providers/*/target/
 
 # IDE files
 .idea/
@@ -30,7 +30,12 @@ postgres_data/
 .env
 .env.local
 
+# Node / Playwright
+node_modules/
+package-lock.json
+playwright-report/
+test-results/
+
 # Temporary files
 *.tmp
 *.bak
-node_modules/*

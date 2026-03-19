@@ -31,7 +31,7 @@ Files are processed in alphabetical order. Each migration is idempotent.
 ## Directory Structure
 
 ```
-migrations/
+keycloak/migrations/
 ├── README.md
 ├── docker-compose.migrations.yaml   # Watch mode override (development)
 └── config-cli/                      # YAML migrations (source of truth)
@@ -64,7 +64,7 @@ docker compose up keycloak-config-cli
 Re-applies config every 10 seconds (picks up file changes):
 
 ```bash
-docker compose -f docker-compose.yml -f migrations/docker-compose.migrations.yaml \
+docker compose -f docker-compose.yml -f keycloak/migrations/docker-compose.migrations.yaml \
     run --rm keycloak-config-cli-watch
 ```
 
@@ -100,7 +100,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'migrations/config-cli/**'
+      - 'keycloak/keycloak/migrations/config-cli/**'
 
 jobs:
   migrate:
@@ -115,7 +115,7 @@ jobs:
             -e KEYCLOAK_USER=${{ secrets.KEYCLOAK_ADMIN }} \
             -e KEYCLOAK_PASSWORD=${{ secrets.KEYCLOAK_PASSWORD }} \
             -e REALM_NAME=production \
-            -v ${{ github.workspace }}/migrations/config-cli:/config \
+            -v ${{ github.workspace }}/keycloak/keycloak/migrations/config-cli:/config \
             adorsys/keycloak-config-cli:6.5.0-24
 ```
 

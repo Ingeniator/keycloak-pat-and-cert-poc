@@ -5,7 +5,7 @@
 # service that re-applies config on file changes during development.
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f migrations/docker-compose.migrations.yaml \
+#   docker compose -f docker-compose.yml -f keycloak/migrations/docker-compose.migrations.yaml \
 #       run --rm keycloak-config-cli-watch
 
 services:
