@@ -32,8 +32,9 @@ services:
 
       # Proxy settings (behind nginx)
       KC_PROXY: edge
+      KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
       KC_HOSTNAME_STRICT: false
-      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HOSTNAME_STRICT_HTTPS: true
       KC_HTTP_ENABLED: true
 
       # X.509 Client Certificate Authentication

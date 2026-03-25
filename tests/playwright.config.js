@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   outputDir: "./test-results",
-  reporter: [["list"], ["html", { outputFolder: "./test-results/playwright-report", open: "never" }]],
+  reporter: [["list"], ["html", { outputFolder: "./playwright-report", open: "never" }]],
   use: {
     baseURL: "https://localhost",
     ignoreHTTPSErrors: true,
