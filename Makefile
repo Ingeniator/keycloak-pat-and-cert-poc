@@ -1,4 +1,4 @@
-.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat test-e2e help logs-gateway shell-gateway
+.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat test-e2e help logs-gateway shell-gateway logs-openfga seed-openfga test-openfga
 
 # Default target
 all: setup
@@ -162,6 +162,18 @@ remove-certs:
 	-security delete-certificate -c "testuser" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
 	@echo "Certificates removed."
 
+# View OpenFGA logs
+logs-openfga:
+	@docker-compose logs -f openfga
+
+# Re-run OpenFGA init container (seed store, model, tuples)
+seed-openfga:
+	@docker-compose up --build --force-recreate openfga-init
+
+# Run OpenFGA integration tests
+test-openfga:
+	@./tests/test-openfga.sh
+
 # Help
 help:
 	@echo "Keycloak X.509 Demo - Available targets:"
@@ -189,6 +201,9 @@ help:
 	@echo "  make shell-gateway - Open shell in Gateway (nginx) container"
 	@echo "  make gen-cert     - Generate self-signed certificate (like ssh-keygen)"
 	@echo "  make register-cert - Register ~/.x509/certificate.pem for testuser"
+	@echo "  make logs-openfga - View OpenFGA logs"
+	@echo "  make seed-openfga - Re-run OpenFGA bootstrap (store, model, tuples)"
+	@echo "  make test-openfga - Run OpenFGA integration tests"
 	@echo "  make import-certs - Import certs to macOS Keychain (for browser testing)"
 	@echo "  make remove-certs - Remove certs from macOS Keychain"
 	@echo ""

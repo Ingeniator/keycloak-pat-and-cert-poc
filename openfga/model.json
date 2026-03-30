@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user"
+    },
+    {
+      "type": "workspace",
+      "relations": {
+        "owner": {
+          "this": {}
+        },
+        "admin": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "owner" } }
+            ]
+          }
+        },
+        "member": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "admin" } }
+            ]
+          }
+        },
+        "viewer": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "member" } }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "owner": { "directly_related_user_types": [{ "type": "user" }] },
+          "admin": { "directly_related_user_types": [{ "type": "user" }] },
+          "member": { "directly_related_user_types": [{ "type": "user" }] },
+          "viewer": { "directly_related_user_types": [{ "type": "user" }] }
+        }
+      }
+    },
+    {
+      "type": "document",
+      "relations": {
+        "workspace": {
+          "this": {}
+        },
+        "owner": {
+          "this": {}
+        },
+        "editor": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "owner" } },
+              { "tupleToUserset": { "tupleset": { "relation": "workspace" }, "computedUserset": { "relation": "admin" } } }
+            ]
+          }
+        },
+        "viewer": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "editor" } },
+              { "tupleToUserset": { "tupleset": { "relation": "workspace" }, "computedUserset": { "relation": "member" } } }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "workspace": { "directly_related_user_types": [{ "type": "workspace" }] },
+          "owner": { "directly_related_user_types": [{ "type": "user" }] },
+          "editor": { "directly_related_user_types": [{ "type": "user" }] },
+          "viewer": { "directly_related_user_types": [{ "type": "user" }] }
+        }
+      }
+    }
+  ]
+}

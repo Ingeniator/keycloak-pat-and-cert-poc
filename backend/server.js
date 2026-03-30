@@ -1,4 +1,5 @@
 import express from "express";
+import { requirePermission } from "./authz.js";
 
 const PORT = process.env.PORT || 3001;
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || "http://keycloak:8080";
@@ -65,6 +66,24 @@ app.post("/account", requireAuth, async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: "Failed to reach Keycloak", details: e.message });
   }
+});
+
+// Workspace routes (OpenFGA authz)
+app.get("/workspaces/:workspaceId", requireAuth, requirePermission("workspace", "workspaceId", "viewer"), (req, res) => {
+  res.json({ workspace: req.params.workspaceId });
+});
+
+app.post("/workspaces/:workspaceId/settings", requireAuth, requirePermission("workspace", "workspaceId", "admin"), (req, res) => {
+  res.json({ workspace: req.params.workspaceId, settings: req.body });
+});
+
+// Document routes (OpenFGA authz)
+app.get("/workspaces/:workspaceId/documents/:documentId", requireAuth, requirePermission("document", "documentId", "viewer"), (req, res) => {
+  res.json({ workspace: req.params.workspaceId, document: req.params.documentId });
+});
+
+app.put("/workspaces/:workspaceId/documents/:documentId", requireAuth, requirePermission("document", "documentId", "editor"), (req, res) => {
+  res.json({ workspace: req.params.workspaceId, document: req.params.documentId, updated: true });
 });
 
 app.listen(PORT, () => {
