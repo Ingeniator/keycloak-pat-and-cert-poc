@@ -156,7 +156,7 @@ services:
     networks:
       - keycloak-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/healthz || exit 1"]
+      test: ["CMD", "grpc_health_probe", "-addr=localhost:8082"]
       interval: 10s
       timeout: 5s
       retries: 5
