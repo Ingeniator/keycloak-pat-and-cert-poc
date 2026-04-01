@@ -86,6 +86,80 @@ app.put("/workspaces/:workspaceId/documents/:documentId", requireAuth, requirePe
   res.json({ workspace: req.params.workspaceId, document: req.params.documentId, updated: true });
 });
 
+// OpenAI-compatible chat completions (hardcoded response)
+app.post("/v1/chat/completions", requireAuth, (req, res) => {
+  const model = req.body?.model || "mock-gpt";
+  const now = Math.floor(Date.now() / 1000);
+  const id = `chatcmpl-${now}-${Math.random().toString(36).slice(2, 10)}`;
+  const lastMsg = req.body?.messages?.at(-1)?.content || "";
+  const content = `Hello! You said: "${lastMsg}". This is a mock response from the OpenAI-compatible endpoint.`;
+
+  const promptTokens = JSON.stringify(req.body?.messages || []).length;
+  const completionTokens = content.length;
+
+  // SSE streaming response
+  if (req.body?.stream) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const chunk = {
+      id,
+      object: "chat.completion.chunk",
+      created: now,
+      model,
+      choices: [{ index: 0, delta: { role: "assistant", content }, finish_reason: null }],
+    };
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+
+    const done = {
+      id,
+      object: "chat.completion.chunk",
+      created: now,
+      model,
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens },
+    };
+    res.write(`data: ${JSON.stringify(done)}\n\n`);
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return;
+  }
+
+  res.json({
+    id,
+    object: "chat.completion",
+    created: now,
+    model,
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content },
+        finish_reason: "stop",
+      },
+    ],
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+    },
+  });
+});
+
+app.get("/v1/models", requireAuth, (req, res) => {
+  res.json({
+    object: "list",
+    data: [
+      {
+        id: "mock-gpt",
+        object: "model",
+        created: 1700000000,
+        owned_by: "demo",
+      },
+    ],
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Backend listening on :${PORT}`);
 });

@@ -1,0 +1,10 @@
+# Aider → nginx gateway → phantom token → backend mock LLM
+# The API key must be a Keycloak PAT (starts with pat_)
+# Generate one: POST https://localhost/api/pat/tokens with a valid Bearer token
+#
+openai-api-base: https://localhost/api/v1
+openai-api-key: pat_1mpxEBSbwrXhCXMoIZvqf55vpLeWm0E5juURvVd5jfR
+model: openai/mock-gpt
+no-stream: true
+no-verify-ssl: true
+env-file: .aider.env
