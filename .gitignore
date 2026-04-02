@@ -39,3 +39,6 @@ test-results/
 # Temporary files
 *.tmp
 *.bak
+
+# Benchmark results
+benchmark/results/
