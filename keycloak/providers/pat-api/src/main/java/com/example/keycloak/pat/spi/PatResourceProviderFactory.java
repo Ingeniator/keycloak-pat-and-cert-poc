@@ -10,6 +10,13 @@ import org.keycloak.services.resource.RealmResourceProviderFactory;
 public class PatResourceProviderFactory implements RealmResourceProviderFactory {
 
     public static final String PROVIDER_ID = "pat-api";
+    private static final String DEFAULT_CLIENT_ID = "ui-bff";
+
+    private static String patClientId = DEFAULT_CLIENT_ID;
+
+    public static String getPatClientId() {
+        return patClientId;
+    }
 
     @Override
     public String getId() {
@@ -23,6 +30,10 @@ public class PatResourceProviderFactory implements RealmResourceProviderFactory 
 
     @Override
     public void init(Config.Scope config) {
+        String configured = config.get("clientId");
+        if (configured != null && !configured.isBlank()) {
+            patClientId = configured;
+        }
     }
 
     @Override

@@ -12,6 +12,7 @@ import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.events.EventType;
 import org.keycloak.services.util.DefaultClientSessionContext;
+import com.example.keycloak.pat.spi.PatResourceProviderFactory;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -53,14 +54,51 @@ public class PatResource {
             return unauthorized();
         }
 
-        List<Map<String, Object>> tokens = new ArrayList<>();
-        List<String> ids = user.getAttributeStream(ATTR_PAT_ID).toList();
-        List<String> names = user.getAttributeStream(ATTR_PAT_NAME).toList();
-        List<String> scopes = user.getAttributeStream(ATTR_PAT_SCOPES).toList();
-        List<String> createdAts = user.getAttributeStream(ATTR_PAT_CREATED_AT).toList();
-        List<String> expiresAts = user.getAttributeStream(ATTR_PAT_EXPIRES_AT).toList();
-        List<String> lastUsedAts = user.getAttributeStream(ATTR_PAT_LAST_USED_AT).toList();
+        List<String> ids = new ArrayList<>(user.getAttributeStream(ATTR_PAT_ID).toList());
+        List<String> names = new ArrayList<>(user.getAttributeStream(ATTR_PAT_NAME).toList());
+        List<String> hashes = new ArrayList<>(user.getAttributeStream(ATTR_PAT_HASH).toList());
+        List<String> scopes = new ArrayList<>(user.getAttributeStream(ATTR_PAT_SCOPES).toList());
+        List<String> createdAts = new ArrayList<>(user.getAttributeStream(ATTR_PAT_CREATED_AT).toList());
+        List<String> expiresAts = new ArrayList<>(user.getAttributeStream(ATTR_PAT_EXPIRES_AT).toList());
+        List<String> lastUsedAts = new ArrayList<>(user.getAttributeStream(ATTR_PAT_LAST_USED_AT).toList());
 
+        // Lazy cleanup: collect indices of expired tokens (reverse order for safe removal)
+        List<Integer> expiredIndices = new ArrayList<>();
+        Instant now = Instant.now();
+        for (int i = 0; i < ids.size(); i++) {
+            if (i < expiresAts.size() && !"never".equals(expiresAts.get(i))) {
+                try {
+                    if (now.isAfter(Instant.parse(expiresAts.get(i)))) {
+                        expiredIndices.add(i);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        // Remove expired tokens from attributes (reverse order to preserve indices)
+        if (!expiredIndices.isEmpty()) {
+            for (int i = expiredIndices.size() - 1; i >= 0; i--) {
+                int idx = expiredIndices.get(i);
+                if (idx < ids.size()) ids.remove(idx);
+                if (idx < names.size()) names.remove(idx);
+                if (idx < hashes.size()) hashes.remove(idx);
+                if (idx < scopes.size()) scopes.remove(idx);
+                if (idx < createdAts.size()) createdAts.remove(idx);
+                if (idx < expiresAts.size()) expiresAts.remove(idx);
+                if (idx < lastUsedAts.size()) lastUsedAts.remove(idx);
+            }
+            user.setAttribute(ATTR_PAT_ID, ids);
+            user.setAttribute(ATTR_PAT_NAME, names);
+            user.setAttribute(ATTR_PAT_HASH, hashes);
+            user.setAttribute(ATTR_PAT_SCOPES, scopes);
+            user.setAttribute(ATTR_PAT_CREATED_AT, createdAts);
+            user.setAttribute(ATTR_PAT_EXPIRES_AT, expiresAts);
+            user.setAttribute(ATTR_PAT_LAST_USED_AT, lastUsedAts);
+            LOGGER.info("Cleaned up " + expiredIndices.size() + " expired PAT(s) for user " + user.getUsername());
+        }
+
+        List<Map<String, Object>> tokens = new ArrayList<>();
         for (int i = 0; i < ids.size(); i++) {
             Map<String, Object> token = new LinkedHashMap<>();
             token.put("id", ids.get(i));
@@ -224,9 +262,10 @@ public class PatResource {
             updateAttributeAtIndex(user, ATTR_PAT_LAST_USED_AT, index, Instant.now().toString());
 
             // Issue a real Keycloak access token
-            ClientModel client = realm.getClientByClientId("ui-bff");
+            String clientId = PatResourceProviderFactory.getPatClientId();
+            ClientModel client = realm.getClientByClientId(clientId);
             if (client == null) {
-                LOGGER.severe("ui-bff client not found in realm " + realm.getName());
+                LOGGER.severe(clientId + " client not found in realm " + realm.getName());
                 return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                         .entity(Map.of("error", "Configuration error"))
                         .build();
