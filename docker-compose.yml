@@ -112,9 +112,9 @@ services:
     image: postgres:15-alpine
     container_name: openfga-postgres
     environment:
-      POSTGRES_DB: openfga
-      POSTGRES_USER: openfga
-      POSTGRES_PASSWORD: openfga_password
+      POSTGRES_DB: ${OPENFGA_POSTGRES_DB:-openfga}
+      POSTGRES_USER: ${OPENFGA_POSTGRES_USER:-openfga}
+      POSTGRES_PASSWORD: ${OPENFGA_POSTGRES_PASSWORD:-openfga_password}
     volumes:
       - openfga_postgres_data:/var/lib/postgresql/data
     networks:
@@ -131,7 +131,7 @@ services:
     command: migrate
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
-      OPENFGA_DATASTORE_URI: postgres://openfga:openfga_password@openfga-postgres:5432/openfga?sslmode=disable
+      OPENFGA_DATASTORE_URI: postgres://${OPENFGA_POSTGRES_USER:-openfga}:${OPENFGA_POSTGRES_PASSWORD:-openfga_password}@openfga-postgres:5432/${OPENFGA_POSTGRES_DB:-openfga}?sslmode=disable
     depends_on:
       openfga-postgres:
         condition: service_healthy
@@ -144,7 +144,7 @@ services:
     command: run
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
-      OPENFGA_DATASTORE_URI: postgres://openfga:openfga_password@openfga-postgres:5432/openfga?sslmode=disable
+      OPENFGA_DATASTORE_URI: postgres://${OPENFGA_POSTGRES_USER:-openfga}:${OPENFGA_POSTGRES_PASSWORD:-openfga_password}@openfga-postgres:5432/${OPENFGA_POSTGRES_DB:-openfga}?sslmode=disable
       OPENFGA_HTTP_ADDR: 0.0.0.0:8081
       OPENFGA_GRPC_ADDR: 0.0.0.0:8082
     ports:
@@ -186,6 +186,11 @@ services:
         condition: service_healthy
     networks:
       - keycloak-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/hello 2>&1 | head -1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   ui:
     build: ./ui
@@ -197,6 +202,11 @@ services:
         condition: service_healthy
     networks:
       - keycloak-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ 2>&1 | head -1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   nginx:
     build: ./gateway

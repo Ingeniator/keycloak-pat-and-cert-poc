@@ -6,7 +6,7 @@ const KEYCLOAK_URL = process.env.KEYCLOAK_URL || "http://keycloak:8080";
 const REALM = process.env.REALM || "public";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // Auth middleware — reads full claims injected by nginx (from introspection)
 // Falls back to Authorization header for direct access
@@ -43,8 +43,12 @@ app.get("/account", requireAuth, async (req, res) => {
         Authorization: req.headers.authorization,
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(10000),
     });
-    res.status(kcRes.status).json(await kcRes.json());
+    if (!kcRes.ok) {
+      return res.status(kcRes.status).json({ error: `Keycloak returned ${kcRes.status}` });
+    }
+    res.json(await kcRes.json());
   } catch (e) {
     res.status(502).json({ error: "Failed to reach Keycloak", details: e.message });
   }
@@ -60,9 +64,13 @@ app.post("/account", requireAuth, async (req, res) => {
         Accept: "application/json",
       },
       body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(10000),
     });
     if (kcRes.status === 204) return res.status(204).end();
-    res.status(kcRes.status).json(await kcRes.json());
+    if (!kcRes.ok) {
+      return res.status(kcRes.status).json({ error: `Keycloak returned ${kcRes.status}` });
+    }
+    res.json(await kcRes.json());
   } catch (e) {
     res.status(502).json({ error: "Failed to reach Keycloak", details: e.message });
   }

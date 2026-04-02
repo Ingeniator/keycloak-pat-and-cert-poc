@@ -42,7 +42,12 @@ export function requirePermission(objectType, paramName, relation) {
     }
 
     try {
-      const allowed = await checkPermission(userId, objectType, objectId, relation);
+      const allowed = await Promise.race([
+        checkPermission(userId, objectType, objectId, relation),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Authorization check timed out")), 5000)
+        ),
+      ]);
       if (!allowed) {
         return res.status(403).json({ error: "Forbidden" });
       }

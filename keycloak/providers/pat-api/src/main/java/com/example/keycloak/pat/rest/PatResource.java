@@ -101,7 +101,7 @@ public class PatResource {
         try {
             String rawToken = generateToken();
             String hash = sha256Hex(rawToken);
-            String id = hash.substring(0, 16);
+            String id = UUID.randomUUID().toString();
 
             String tokenScopes = (request.scopes != null && !request.scopes.isBlank())
                     ? request.scopes : "openid profile email";

@@ -141,8 +141,7 @@ async function exchangePat(patToken) {
   });
 
   if (resp.status !== 200) {
-    var errText = await resp.text();
-    ngx.log(ngx.ERR, "PAT exchange HTTP " + resp.status + ": " + errText);
+    ngx.log(ngx.ERR, "PAT exchange failed with HTTP " + resp.status);
     return null;
   }
 
@@ -204,13 +203,24 @@ function filterClaims(claims) {
 
 function login(r) {
   var redirectUri = BASE_URL + "/auth/callback";
+  // Generate cryptographic state parameter for CSRF protection
+  var state = crypto.createHash("sha256")
+    .update(crypto.randomBytes(32))
+    .digest("hex")
+    .substring(0, 32);
+
   var params = [
     "client_id=" + CLIENT_ID,
     "response_type=code",
     "scope=openid%20profile%20email",
     "redirect_uri=" + encodeURIComponent(redirectUri),
+    "state=" + state,
   ].join("&");
 
+  // Store state in a short-lived cookie for validation in callback
+  var stateCookie = "__oauth_state=" + state +
+    "; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600";
+  r.headersOut["Set-Cookie"] = stateCookie;
   r.return(302, OIDC_EXTERNAL + "/auth?" + params);
 }
 
@@ -218,6 +228,14 @@ async function callback(r) {
   var code = r.args.code;
   if (!code) {
     r.return(400, '{"error":"Missing authorization code"}');
+    return;
+  }
+
+  // Validate CSRF state parameter
+  var expectedState = parseCookies(r.headersIn["Cookie"])["__oauth_state"];
+  var incomingState = r.args.state;
+  if (!expectedState || !incomingState || expectedState !== incomingState) {
+    r.return(403, '{"error":"Invalid state parameter"}');
     return;
   }
 
@@ -246,6 +264,11 @@ async function callback(r) {
 
     var tokens = await resp.json();
     setTokenCookie(r, tokens);
+    // Clear state cookie after successful validation
+    r.headersOut["Set-Cookie"] = [
+      r.headersOut["Set-Cookie"],
+      "__oauth_state=; Path=/auth; HttpOnly; Secure; Max-Age=0"
+    ];
     r.return(302, BASE_URL + "/ui/");
   } catch (e) {
     r.error("Callback error: " + e.message);

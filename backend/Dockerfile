@@ -1,7 +1,8 @@
 FROM node:20-alpine
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --production
+RUN npm ci --omit=dev && npm cache clean --force
 COPY server.js authz.js ./
+USER node
 EXPOSE 3001
 CMD ["node", "server.js"]

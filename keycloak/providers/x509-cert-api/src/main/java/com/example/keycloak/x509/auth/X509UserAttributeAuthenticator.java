@@ -422,7 +422,8 @@ public class X509UserAttributeAuthenticator implements Authenticator {
     private void autoRegisterCertificate(UserModel user, X509Certificate cert, String fingerprint) {
         try {
             // Get existing fingerprints or create new list
-            List<String> existingFingerprints = user.getAttributeStream(ATTR_X509_FINGERPRINT).toList();
+            List<String> existingFingerprints = new ArrayList<>(
+                    user.getAttributeStream(ATTR_X509_FINGERPRINT).toList());
 
             // Check if fingerprint already registered
             if (existingFingerprints.contains(fingerprint)) {
@@ -430,9 +431,10 @@ public class X509UserAttributeAuthenticator implements Authenticator {
                 return;
             }
 
-            // Add the new fingerprint
-            user.setSingleAttribute(ATTR_X509_FINGERPRINT, fingerprint);
-            LOGGER.info("Registered certificate fingerprint for user " + user.getUsername() + ": " + fingerprint);
+            // Append the new fingerprint (not replace)
+            existingFingerprints.add(fingerprint);
+            user.setAttribute(ATTR_X509_FINGERPRINT, existingFingerprints);
+            LOGGER.info("Registered certificate fingerprint for user " + user.getUsername());
 
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Failed to auto-register certificate for user: " + user.getUsername(), e);

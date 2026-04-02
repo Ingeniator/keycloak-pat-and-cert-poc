@@ -12,7 +12,9 @@ import org.keycloak.services.managers.AuthenticationManager;
 import java.io.ByteArrayInputStream;
 import java.security.MessageDigest;
 import java.security.PublicKey;
+import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateFactory;
+import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.logging.Level;
@@ -108,6 +110,19 @@ public class X509CertificateResource {
         try {
             // Parse the certificate
             X509Certificate cert = parseCertificate(request.certificate);
+
+            // Reject expired or not-yet-valid certificates
+            try {
+                cert.checkValidity();
+            } catch (CertificateExpiredException e) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "Certificate has expired"))
+                        .build();
+            } catch (CertificateNotYetValidException e) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", "Certificate is not yet valid"))
+                        .build();
+            }
 
             // Calculate fingerprint
             String fingerprint = calculateFingerprint(cert);
