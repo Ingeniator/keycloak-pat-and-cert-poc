@@ -207,7 +207,7 @@ services:
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./gateway/conf.d:/etc/nginx/conf.d:ro
-      - ./gateway/njs:/etc/nginx/njs:ro
+      - ./gateway/njs/oidc.js:/etc/nginx/njs/oidc.js.template:ro
       - ./certs/server:/etc/nginx/certs:ro
       - ./certs/ca:/etc/nginx/ca:ro
     depends_on:

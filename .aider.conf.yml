@@ -2,6 +2,10 @@
 # The API key must be a Keycloak PAT (starts with pat_)
 # Generate one: POST https://localhost/api/pat/tokens with a valid Bearer token
 #
+# Auth methods supported by the gateway:
+#   Bearer:  Authorization: Bearer pat_xxx          (aider, Cline, OpenAI SDK)
+#   Basic:   Authorization: Basic base64(token:pat_xxx)  (Langfuse SDK)
+#
 openai-api-base: https://localhost/api/v1
 openai-api-key: pat_1mpxEBSbwrXhCXMoIZvqf55vpLeWm0E5juURvVd5jfR
 model: openai/mock-gpt

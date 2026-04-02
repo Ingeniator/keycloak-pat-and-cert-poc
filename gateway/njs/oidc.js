@@ -5,15 +5,15 @@
 
 var crypto = require("crypto");
 
-const KEYCLOAK_INTERNAL = "http://keycloak:8080";
-const KEYCLOAK_EXTERNAL = "https://localhost";
-const REALM = "public";
-const CLIENT_ID = "ui-bff";
-const CLIENT_SECRET = "bff-secret";
-const BASE_URL = "https://localhost";
-const TOKEN_COOKIE = "__token";
-const INTROSPECTION_CACHE_SEC = 30;
-const PAT_CACHE_SEC = 60;
+const KEYCLOAK_INTERNAL = "${KEYCLOAK_INTERNAL}";
+const KEYCLOAK_EXTERNAL = "${KEYCLOAK_EXTERNAL}";
+const REALM = "${REALM}";
+const CLIENT_ID = "${CLIENT_ID}";
+const CLIENT_SECRET = "${CLIENT_SECRET}";
+const BASE_URL = "${BASE_URL}";
+const TOKEN_COOKIE = "${TOKEN_COOKIE}";
+const INTROSPECTION_CACHE_SEC = parseInt("${INTROSPECTION_CACHE_SEC}");
+const PAT_CACHE_SEC = parseInt("${PAT_CACHE_SEC}");
 
 const OIDC_BASE = `${KEYCLOAK_INTERNAL}/realms/${REALM}/protocol/openid-connect`;
 const OIDC_EXTERNAL = `${KEYCLOAK_EXTERNAL}/realms/${REALM}/protocol/openid-connect`;
@@ -298,6 +298,38 @@ async function resolveToken(r) {
       return;
     } catch (e) {
       r.error("PAT exchange failed: " + e.message);
+      r.return(401);
+      return;
+    }
+  }
+
+  // Check for PAT in Basic auth (e.g. Langfuse SDK: Basic base64(token:pat_xxx))
+  if (authHeader && authHeader.startsWith("Basic ")) {
+    try {
+      var decoded = Buffer.from(authHeader.substring(6), "base64").toString();
+      var sep = decoded.indexOf(":");
+      if (sep > 0) {
+        var publicKey = decoded.substring(0, sep);
+        var secretKey = decoded.substring(sep + 1);
+        if (publicKey === "token" && secretKey.startsWith("pat_")) {
+          var accessToken = await exchangePat(secretKey);
+          if (!accessToken) {
+            r.return(401);
+            return;
+          }
+          var claims = await introspect(accessToken);
+          if (!claims) {
+            r.return(401);
+            return;
+          }
+          r.headersOut["X-Access-Token"] = accessToken;
+          r.headersOut["X-Token-Claims"] = JSON.stringify(filterClaims(claims));
+          r.return(200);
+          return;
+        }
+      }
+    } catch (e) {
+      r.error("Basic auth PAT exchange failed: " + e.message);
       r.return(401);
       return;
     }

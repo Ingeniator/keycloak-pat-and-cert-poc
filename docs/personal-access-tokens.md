@@ -159,7 +159,14 @@ Raw tokens are **never stored**. If the hash store is compromised, tokens cannot
 
 ### Exchange Flow
 
-When nginx sees `Authorization: Bearer pat_...`:
+Nginx recognizes PATs in two header formats:
+
+- **Bearer**: `Authorization: Bearer pat_xxx` — standard for OpenAI-compatible clients (aider, Cline, curl)
+- **Basic**: `Authorization: Basic base64(token:pat_xxx)` — for SDKs that require Basic auth (e.g. Langfuse)
+
+In the Basic auth case, the public key must be the literal string `token` and the secret key must be a PAT starting with `pat_`.
+
+When nginx sees a PAT (via either format):
 
 1. **njs** calls the Keycloak PAT exchange endpoint (internal only)
 2. Keycloak hashes the token, finds the user by `pat_hash` attribute
@@ -229,6 +236,30 @@ resp = requests.get(
     verify=False,
 )
 print(resp.json())
+```
+
+### Langfuse SDK
+
+```python
+from langfuse import Langfuse
+
+langfuse = Langfuse(
+    public_key="token",
+    secret_key="pat_7kQm9xR2...",
+    host="https://localhost/api",
+)
+```
+
+### Aider (OpenAI-compatible)
+
+```yaml
+# .aider.conf.yml
+openai-api-base: https://localhost/api/v1
+openai-api-key: pat_7kQm9xR2...
+model: openai/mock-gpt
+no-stream: true
+no-verify-ssl: true
+env-file: .aider.env
 ```
 
 ### GitHub Actions
