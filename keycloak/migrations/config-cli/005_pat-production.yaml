@@ -1,0 +1,139 @@
+# Migration: 005_pat-production
+# Description: Standalone PAT migration for production — user profile attributes + dedicated PAT client
+# Usage: Copy this file to your production keycloak-config-cli config directory.
+#        Replace "public" with your realm name, and set CLIENT_SECRET via env var substitution.
+# Author: DevOps Team
+# Date: 2026-04-03
+
+realm: "$(env:REALM_NAME:-public)"
+enabled: true
+
+# ---------------------------------------------------------------------------
+# User profile: PAT attributes
+# ---------------------------------------------------------------------------
+# These multivalued attributes store PAT metadata on user records.
+# pat_hash is admin-only view to prevent users reading their own token hashes.
+
+userProfile:
+  attributes:
+    # Preserve existing standard attributes (required by keycloak-config-cli merge)
+    - name: "username"
+      displayName: "${username}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          min: 3
+          max: 255
+        username-prohibited-characters: {}
+        up-username-not-idn-homograph: {}
+    - name: "email"
+      displayName: "${email}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        email: {}
+        length:
+          max: 255
+    - name: "firstName"
+      displayName: "${firstName}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+    - name: "lastName"
+      displayName: "${lastName}"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin", "user"]
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+
+    # --- PAT attributes ---
+    - name: "pat_id"
+      displayName: "PAT ID"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_name"
+      displayName: "PAT Name"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_hash"
+      displayName: "PAT Hash"
+      permissions:
+        view: ["admin"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_scopes"
+      displayName: "PAT Scopes"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_created_at"
+      displayName: "PAT Created At"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_expires_at"
+      displayName: "PAT Expires At"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+    - name: "pat_last_used_at"
+      displayName: "PAT Last Used At"
+      permissions:
+        view: ["admin", "user"]
+        edit: ["admin"]
+      multivalued: true
+
+# ---------------------------------------------------------------------------
+# Client: PAT exchange
+# ---------------------------------------------------------------------------
+# Confidential client used by the PAT provider to mint access tokens.
+# Set KC_SPI_REALM_RESTAPI_EXTENSION_PAT_API_CLIENT_ID to match clientId below.
+
+clients:
+  - clientId: "$(env:PAT_CLIENT_ID:-pat-exchange)"
+    name: "PAT Exchange Client"
+    description: "Confidential client for PAT-to-JWT exchange. Used internally by the pat-api SPI provider."
+    enabled: true
+    publicClient: false
+    clientAuthenticatorType: "client-secret"
+    secret: "$(env:PAT_CLIENT_SECRET:-pat-exchange-secret)"
+    protocol: "openid-connect"
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: true
+
+    attributes:
+      # Lightweight token — forces introspection for full claims (phantom token pattern)
+      access.token.lightweight: "true"
+      # Short-lived tokens to limit session accumulation from PAT exchanges
+      access.token.lifespan: "300"
+
+    defaultClientScopes:
+      - "web-origins"
+      - "acr"
+      - "profile"
+      - "roles"
+      - "email"
+    optionalClientScopes:
+      - "address"
+      - "phone"
+      - "offline_access"

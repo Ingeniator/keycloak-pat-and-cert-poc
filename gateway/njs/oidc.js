@@ -2,8 +2,11 @@
 // Handles OIDC login/callback/logout and injects introspected claims for backends.
 // Stateless — tokens are stored in the cookie, not in server memory.
 // The lightweight access token is small (~500 bytes), so cookies stay within limits.
+//
+// PAT authentication is handled by the separate pat.js module.
 
 var crypto = require("crypto");
+import pat from "pat.js";
 
 const KEYCLOAK_INTERNAL = "${KEYCLOAK_INTERNAL}";
 const KEYCLOAK_EXTERNAL = "${KEYCLOAK_EXTERNAL}";
@@ -13,11 +16,9 @@ const CLIENT_SECRET = "${CLIENT_SECRET}";
 const BASE_URL = "${BASE_URL}";
 const TOKEN_COOKIE = "${TOKEN_COOKIE}";
 const INTROSPECTION_CACHE_SEC = parseInt("${INTROSPECTION_CACHE_SEC}");
-const PAT_CACHE_SEC = parseInt("${PAT_CACHE_SEC}");
 
 const OIDC_BASE = `${KEYCLOAK_INTERNAL}/realms/${REALM}/protocol/openid-connect`;
 const OIDC_EXTERNAL = `${KEYCLOAK_EXTERNAL}/realms/${REALM}/protocol/openid-connect`;
-const PAT_EXCHANGE_URL = `${KEYCLOAK_INTERNAL}/realms/${REALM}/pat-api/tokens/exchange`;
 
 // ---------------------------------------------------------------------------
 // Cookie helpers
@@ -120,39 +121,6 @@ async function introspect(token) {
   ngx.shared.cache.set(cacheKey, JSON.stringify(data), ttl);
 
   return data;
-}
-
-// ---------------------------------------------------------------------------
-// PAT exchange — convert personal access token to real Keycloak token
-// ---------------------------------------------------------------------------
-
-async function exchangePat(patToken) {
-  // Check cache: PAT hash → access token
-  var cacheKey = "_pat_" + tokenCacheKey(patToken);
-  var cached = ngx.shared.cache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  var resp = await ngx.fetch(PAT_EXCHANGE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: patToken }),
-  });
-
-  if (resp.status !== 200) {
-    ngx.log(ngx.ERR, "PAT exchange failed with HTTP " + resp.status);
-    return null;
-  }
-
-  var data = await resp.json();
-  if (!data.access_token) return null;
-
-  // Cache the access token
-  var ttl = Math.min(data.expires_in || 300, PAT_CACHE_SEC);
-  ngx.shared.cache.set(cacheKey, data.access_token, ttl);
-
-  return data.access_token;
 }
 
 // ---------------------------------------------------------------------------
@@ -298,65 +266,9 @@ function logout(r) {
 // ---------------------------------------------------------------------------
 
 async function resolveToken(r) {
-  // Check for PAT in Authorization header
-  var authHeader = r.headersIn["Authorization"];
-  if (authHeader && authHeader.startsWith("Bearer pat_")) {
-    var patToken = authHeader.substring(7); // strip "Bearer "
-    try {
-      var accessToken = await exchangePat(patToken);
-      if (!accessToken) {
-        r.return(401);
-        return;
-      }
-
-      var claims = await introspect(accessToken);
-      if (!claims) {
-        r.return(401);
-        return;
-      }
-
-      r.headersOut["X-Access-Token"] = accessToken;
-      r.headersOut["X-Token-Claims"] = JSON.stringify(filterClaims(claims));
-      r.return(200);
-      return;
-    } catch (e) {
-      r.error("PAT exchange failed: " + e.message);
-      r.return(401);
-      return;
-    }
-  }
-
-  // Check for PAT in Basic auth (e.g. Langfuse SDK: Basic base64(token:pat_xxx))
-  if (authHeader && authHeader.startsWith("Basic ")) {
-    try {
-      var decoded = Buffer.from(authHeader.substring(6), "base64").toString();
-      var sep = decoded.indexOf(":");
-      if (sep > 0) {
-        var publicKey = decoded.substring(0, sep);
-        var secretKey = decoded.substring(sep + 1);
-        if (publicKey === "token" && secretKey.startsWith("pat_")) {
-          var accessToken = await exchangePat(secretKey);
-          if (!accessToken) {
-            r.return(401);
-            return;
-          }
-          var claims = await introspect(accessToken);
-          if (!claims) {
-            r.return(401);
-            return;
-          }
-          r.headersOut["X-Access-Token"] = accessToken;
-          r.headersOut["X-Token-Claims"] = JSON.stringify(filterClaims(claims));
-          r.return(200);
-          return;
-        }
-      }
-    } catch (e) {
-      r.error("Basic auth PAT exchange failed: " + e.message);
-      r.return(401);
-      return;
-    }
-  }
+  // Delegate PAT auth (Bearer pat_* / Basic token:pat_*) to pat.js
+  var patHandled = await pat.resolvePatFromRequest(r);
+  if (patHandled) return;
 
   // Cookie-based session flow
   var tokens = getTokens(r);
