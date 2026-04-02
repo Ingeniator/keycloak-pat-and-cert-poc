@@ -1,82 +1,112 @@
 # Keycloak X.509 Certificate Authentication Demo
 
-A demonstration project showing how to configure Keycloak v24 with X.509 certificate authentication behind Nginx v1.25 reverse proxy. Features GitHub-style certificate management where users can register their certificates via API.
+A demonstration project showing X.509 certificate authentication with Keycloak behind an Nginx reverse proxy. Features GitHub-style certificate management (users register public certificates via API, authenticate with private keys), personal access tokens, fine-grained authorization with OpenFGA, and a phantom token pattern for stateless API access.
 
 ## Features
 
-- **Keycloak v24** with X.509 client certificate authentication
-- **Nginx v1.25** reverse proxy with SSL termination and client certificate forwarding
-- **Configuration as Code** - realm, clients, roles, and authentication flows defined in JSON
-- **Custom Certificate API** - REST API for users to manage their X.509 certificates (similar to GitHub SSH keys)
-- **Custom Authenticator** - Looks up users by certificate fingerprint stored in user attributes
-- **Self-signed certificates** - Complete PKI setup with CA, server, and client certificates
-- **Comprehensive test suite** - Automated tests for API, authentication, and infrastructure
+- **X.509 Certificate Authentication** - Register public certificates, authenticate via TLS handshake (like GitHub SSH keys)
+- **Personal Access Tokens (PAT)** - GitHub-style long-lived tokens for non-interactive API access
+- **Fine-Grained Authorization** - OpenFGA integration with hierarchical permissions (workspace/document model)
+- **Phantom Token Pattern** - Nginx introspects opaque tokens and injects JWT claims into backend requests
+- **OIDC Gateway** - Nginx + njs handles login, callback, logout, and token resolution
+- **Configuration as Code** - Versioned YAML migrations applied automatically via keycloak-config-cli
+- **Self-Signed Certificate Support** - Users generate certs like SSH keys, no CA required
+- **React UI** - Web interface for certificate management, PAT management, and API testing
+- **Comprehensive Test Suite** - Shell-based API tests, Playwright E2E tests, and health checks
 
 ## Architecture
 
 ```
-┌─────────────┐     HTTPS + Client Cert      ┌─────────────┐
-│   Browser   │ ──────────────────────────▶  │    Nginx    │
-│  (User)     │                              │   (v1.25)   │
-└─────────────┘                              └──────┬──────┘
-                                                   │
-                                            HTTP + Headers
-                                                   │
-                                            ┌──────▼──────┐
-                                            │  Keycloak   │
-                                            │   (v24)     │
-                                            └──────┬──────┘
-                                                   │
-                                            ┌──────▼──────┐
-                                            │ PostgreSQL  │
-                                            │   (v15)     │
-                                            └─────────────┘
+┌─────────────┐     HTTPS + Client Cert      ┌──────────────────┐
+│   Browser   │ ────────────────────────────▶ │      Nginx       │
+│             │                               │    (v1.27)       │
+└─────────────┘                               │  - TLS termination│
+                                              │  - OIDC (njs)    │
+┌─────────────┐     Bearer pat_xxx            │  - PAT exchange  │
+│  API Client │ ────────────────────────────▶ │  - Phantom token │
+│  (curl/SDK) │                               └────┬───┬───┬─────┘
+                                                   │   │   │
+                          ┌────────────────────────┘   │   └────────────────────┐
+                          │                            │                        │
+                   ┌──────▼──────┐              ┌──────▼──────┐          ┌──────▼──────┐
+                   │  Keycloak   │              │   Backend   │          │     UI      │
+                   │   (v24)     │              │ (Express.js)│          │ (React+Vite)│
+                   └──────┬──────┘              └──────┬──────┘          └─────────────┘
+                          │                            │
+                   ┌──────▼──────┐              ┌──────▼──────┐
+                   │ PostgreSQL  │              │   OpenFGA   │
+                   │   (v15)     │              │  (AuthZ)    │
+                   └─────────────┘              └──────┬──────┘
+                                                       │
+                                                ┌──────▼──────┐
+                                                │ PostgreSQL  │
+                                                │   (v15)     │
+                                                └─────────────┘
 ```
 
 ## Project Structure
 
 ```
 keycloak_x509_demo/
-├── docker-compose.yml          # Main orchestration file
-├── .env.example                # Environment variables template
-├── Makefile                    # Build and test commands
+├── docker-compose.yml              # Service orchestration (10 services)
+├── .env.example                    # Environment variables template
+├── Makefile                        # Build, test, and utility commands
 ├── keycloak/
-│   ├── providers/              # Custom Keycloak extensions
-│   │   ├── x509-cert-api/      # Certificate management API (Maven project)
-│   │   └── pat-api/            # Personal Access Token API (Maven project)
-│   ├── migrations/             # Realm configuration as code
-│   │   ├── config-cli/         # Versioned YAML migrations
-│   │   └── scripts/            # Migration & admin scripts
-│   └── conf/                   # Additional configuration
-│       └── quarkus.properties  # Keycloak Quarkus settings
-├── gateway/                    # OIDC gateway (nginx + njs)
-│   ├── nginx.conf              # Main Nginx configuration
-│   ├── conf.d/
-│   │   └── keycloak.conf       # Reverse proxy configuration
+│   ├── providers/                  # Custom Keycloak extensions
+│   │   ├── x509-cert-api/          # Certificate management API (Maven)
+│   │   └── pat-api/                # Personal Access Token API (Maven)
+│   ├── migrations/                 # Realm configuration as code
+│   │   ├── config-cli/             # Versioned YAML migrations (000-005)
+│   │   └── scripts/                # Migration & admin scripts
+│   └── conf/
+│       └── quarkus.properties      # Keycloak Quarkus settings
+├── gateway/                        # OIDC gateway (Nginx + njs)
+│   ├── nginx.conf                  # Upstreams, rate limiting, shared cache
+│   ├── conf.d/keycloak.conf        # Reverse proxy, TLS, security headers
 │   └── njs/
-│       └── oidc.js             # Phantom token OIDC handler
-├── certs/                      # Generated certificates
-│   ├── ca/                     # Certificate Authority
-│   ├── server/                 # Server certificates
-│   ├── client/                 # Client certificates
-│   └── truststore.jks          # Java truststore for Keycloak
+│       ├── oidc.js                 # Phantom token OIDC handler
+│       └── pat.js                  # PAT exchange handler
+├── backend/                        # Protected API (Express.js)
+│   ├── server.js                   # Endpoints (hello, workspaces, mock OpenAI)
+│   └── authz.js                    # OpenFGA authorization middleware
+├── ui/                             # Web interface (React + Vite)
+│   └── src/
+│       ├── App.jsx                 # Main app with auth state
+│       ├── PatManager.jsx          # PAT create/list/revoke
+│       ├── PublicKeyForm.jsx       # Certificate upload
+│       ├── HelloApi.jsx            # API testing
+│       └── TokenInfo.jsx           # Token/user display
+├── openfga/                        # Fine-grained authorization
+│   ├── model.json                  # Relation model (workspace, document)
+│   └── seed.mjs                    # Initialize store, model, and tuples
+├── certs/                          # Generated PKI
+│   ├── ca/                         # Certificate Authority
+│   ├── server/                     # Server certificates (Nginx)
+│   ├── client/                     # Client certificates (testuser, admin)
+│   └── truststore.jks              # Java truststore for Keycloak
 ├── scripts/
-│   ├── setup.sh                # Main setup script
-│   ├── generate-certs.sh       # Certificate generation
-│   └── build-provider.sh       # Build custom provider
-└── tests/
-    ├── package.json            # Playwright dependency
-    ├── playwright.config.js    # Playwright configuration
-    ├── test-all.sh             # Run all tests
-    ├── test-health.sh          # Infrastructure health tests
-    ├── test-setup.sh           # Test setup (register certificates)
-    ├── test-api.sh             # Certificate API tests
-    ├── test-cert-auth.sh       # Certificate authentication tests
-    ├── test-pat.sh             # Personal Access Token tests
-    └── e2e/                    # Playwright end-to-end tests
-        ├── helpers.js
-        ├── login.spec.js
-        └── pat.spec.js
+│   ├── setup.sh                    # Full setup (prereqs, certs, build, start)
+│   ├── generate-certs.sh           # PKI generation (CA, server, client)
+│   ├── generate-client-cert.sh     # New CA-signed client certificate
+│   ├── generate-self-signed-cert.sh # Self-signed cert (like ssh-keygen)
+│   ├── build-provider.sh           # Build X.509 provider
+│   └── build-pat-provider.sh       # Build PAT provider
+├── tests/
+│   ├── test-all.sh                 # Run all test suites
+│   ├── test-health.sh              # Infrastructure health (10 tests)
+│   ├── test-api.sh                 # Certificate API (10 tests)
+│   ├── test-cert-auth.sh           # Certificate authentication (6 tests)
+│   ├── test-pat.sh                 # Personal access token tests
+│   ├── test-openfga.sh             # OpenFGA authorization tests
+│   └── e2e/                        # Playwright browser tests
+│       ├── login.spec.js
+│       └── pat.spec.js
+└── docs/
+    ├── authentication-flow.md      # X.509 auth explained
+    ├── personal-access-tokens.md   # PAT feature docs
+    ├── PAT-quick-start.md
+    ├── phantom-token-architecture.md
+    └── migration-guide.md
 ```
 
 ## Quick Start
@@ -85,21 +115,21 @@ keycloak_x509_demo/
 
 - Docker & Docker Compose
 - OpenSSL
-- Java JDK 17+ (for keytool and building provider)
-- Maven (for building custom provider)
+- Java JDK 17+ (for keytool and building providers)
+- Maven (for building custom providers)
 
 ### Setup
 
 ```bash
-# Copy and customize environment variables (optional — defaults work out of the box)
+# Copy and customize environment variables (optional - defaults work out of the box)
 cp .env.example .env
 
-# Complete setup (generates certs, builds provider, starts services)
+# Complete setup (generates certs, builds providers, starts services)
 make setup
 
 # Or step by step:
 make certs      # Generate certificates
-make build      # Build custom provider
+make build      # Build custom providers (x509 + pat)
 make start      # Start Docker services
 ```
 
@@ -107,95 +137,112 @@ make start      # Start Docker services
 
 | URL | Description |
 |-----|-------------|
+| https://localhost/ui/ | Web UI (certificate & PAT management) |
 | https://localhost/admin | Keycloak Admin Console |
+| https://localhost/api/hello | Backend API (requires auth) |
 | https://localhost/realms/x509-demo/account | User Account Console |
 | https://localhost/realms/x509-demo/x509-cert-api/certificates | Certificate API |
 
 ### Credentials
 
-| User | Password | Description |
-|------|----------|-------------|
-| admin | admin | Keycloak admin |
-| testuser | testuser123 | Test user with certificate |
+| User | Password | Roles |
+|------|----------|-------|
+| admin | admin | Keycloak administrator |
+| testuser | testuser123 | user (with test certificate) |
+
+Client certificate password (for .p12 files): `changeit`
 
 ## Makefile Commands
 
 ```bash
+# Setup & Build
 make setup          # Complete setup (certs + build + start)
 make certs          # Generate certificates only
-make build          # Build custom Keycloak provider
+make build          # Build both custom providers (x509 + pat)
+make build-pat      # Build PAT provider only
 make start          # Start Docker services
 make stop           # Stop Docker services
 make restart        # Restart Docker services
+
+# Logs
 make logs           # View all logs
 make logs-keycloak  # View Keycloak logs
-make logs-gateway   # View Gateway (nginx) logs
-make clean          # Remove all generated files
+make logs-gateway   # View Gateway (Nginx) logs
+make logs-openfga   # View OpenFGA logs
 
 # Testing
 make test           # Run all tests
-make test-health    # Test infrastructure health
+make test-health    # Infrastructure health checks
 make test-setup     # Register test certificates
-make test-api       # Test certificate management API
-make test-cert      # Test certificate authentication
+make test-api       # Certificate management API tests
+make test-cert      # Certificate authentication tests
+make test-pat       # Personal access token tests
+make test-openfga   # OpenFGA authorization tests
+make test-e2e       # Playwright browser tests
 
-# Browser testing (macOS)
+# Certificates
+make new-client     # Generate new CA-signed client cert
+make gen-cert       # Generate self-signed certificate (like ssh-keygen)
+make register-cert  # Register ~/.x509/certificate.pem for testuser
 make import-certs   # Import certs to macOS Keychain
 make remove-certs   # Remove certs from macOS Keychain
 
 # Utilities
 make export-realm   # Export realm from running Keycloak
 make shell-keycloak # Open shell in Keycloak container
-make shell-gateway  # Open shell in Gateway (nginx) container
-make new-client     # Generate new client certificate
+make shell-gateway  # Open shell in Gateway container
+make seed-openfga   # Re-run OpenFGA initialization
+make clean          # Remove all generated files
 make help           # Show all available commands
 ```
 
-## Testing
+## Certificate Authentication Flow
 
-Run the complete test suite:
+For a detailed explanation, see [docs/authentication-flow.md](docs/authentication-flow.md).
+
+### How It Works
+
+1. **Register certificate** (one-time setup):
+   - Authenticate with password
+   - Upload **public certificate** (private key stays on your machine)
+   - Keycloak stores SHA-256 fingerprint in user attributes
+
+2. **Authenticate with certificate**:
+   - Browser presents client certificate during TLS handshake
+   - Browser proves private key ownership via cryptographic signature
+   - Nginx forwards public cert to Keycloak via headers
+   - Custom authenticator looks up user by fingerprint
+   - User authenticated without password
+
+### Key Security Points
+
+- **Private key never leaves your machine** - only used for TLS signatures
+- **Server stores only public certificate and fingerprint** - no secrets to steal
+- **Self-signed certificates supported** - like GitHub SSH keys, no CA required
+- TLS handshake cryptographically proves private key ownership
+
+## Generating Your Own Certificate
+
+Users can generate self-signed certificates like SSH keys:
 
 ```bash
-make test
+# Generate certificate (like ssh-keygen)
+make gen-cert
+
+# Or specify output directory and identity
+./scripts/generate-self-signed-cert.sh ~/.x509 "John Doe" "john@example.com"
 ```
 
-The test suite includes:
+This creates:
+- `private.key.pem` - Keep secret (like `~/.ssh/id_rsa`)
+- `certificate.pem` - Upload to API (like `~/.ssh/id_rsa.pub`)
+- `certificate.p12` - Import to browser
 
-### Infrastructure Health Tests (10 tests)
-- Keycloak accessibility
-- Realm configuration
-- OIDC endpoints
-- Nginx SSL termination
-- Custom X509 API provider
-- Database connectivity
-- OAuth client configuration
-- Test user existence
-- X.509 browser flow
-- Certificate files
-
-### Certificate API Tests (10 tests)
-- Authentication and token retrieval
-- List certificates endpoint
-- Unauthorized access rejection
-- Add certificate
-- Verify certificate
-- Invalid certificate handling
-- Empty certificate rejection
-- Duplicate certificate rejection
-- Certificate info in response
-- Token x509 claims
-
-### Certificate Authentication Tests (6 tests)
-- TLS connection with client certificate
-- Nginx certificate forwarding
-- Authentication flow with certificate
-- Keycloak certificate processing
-- Login page without certificate
-- Unregistered certificate handling
+Then register with Keycloak and import to your browser (see script output for commands).
 
 ## Certificate Management API
 
-The custom API allows users to manage their X.509 certificates, similar to GitHub's SSH key management.
+REST API for managing X.509 certificates, similar to GitHub SSH key management.
 
 ### Base URL
 ```
@@ -232,58 +279,97 @@ curl -sk -X POST "https://localhost/realms/x509-demo/x509-cert-api/certificates"
     }'
 ```
 
-### Example: List Certificates
+## Personal Access Tokens
+
+GitHub-style long-lived tokens for non-interactive API access. See [docs/personal-access-tokens.md](docs/personal-access-tokens.md) for full documentation.
+
+### Quick Start
 
 ```bash
-curl -sk "https://localhost/realms/x509-demo/x509-cert-api/certificates" \
-    -H "Authorization: Bearer $TOKEN"
+# Create a PAT via API
+curl -sk -X POST "https://localhost/api/pat/tokens" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "my-script", "expiresIn": "30d"}'
+
+# Use PAT to call API
+curl -sk "https://localhost/api/hello" \
+    -H "Authorization: Bearer pat_xxxxx"
 ```
 
-## Certificate Authentication Flow
+### PAT API Endpoints
 
-For a detailed explanation of how X.509 authentication works, including the role of public and private keys, see [docs/authentication-flow.md](docs/authentication-flow.md).
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/pat/tokens` | Create a new PAT |
+| GET | `/api/pat/tokens` | List all PATs |
+| DELETE | `/api/pat/tokens/{id}` | Revoke a PAT |
 
-### Quick Overview
+Token format: `pat_<random_base62>`. Configurable expiration from 7 days to 1 year. PATs are exchanged for JWTs at the Nginx layer and cached in shared memory.
 
-1. **User registers certificate via API:**
-   - Authenticates with password
-   - Uploads their **public certificate** (private key stays on their machine)
-   - Certificate fingerprint (SHA-256 hash) stored in user attributes
+## Phantom Token Pattern
 
-2. **User authenticates with certificate:**
-   - Browser presents client certificate during TLS handshake
-   - Browser proves private key ownership via cryptographic signature
-   - Nginx verifies signature and forwards public cert to Keycloak
-   - Custom authenticator extracts fingerprint from certificate
-   - Looks up user by fingerprint in attributes
-   - User authenticated without password
+Nginx acts as a security gateway, resolving opaque tokens (session cookies or PATs) into JWTs before forwarding to the backend. See [docs/phantom-token-architecture.md](docs/phantom-token-architecture.md).
 
-### Key Security Points
+- All API requests pass through `/_auth` subrequest
+- Nginx introspects tokens via Keycloak
+- Backend receives `Authorization: Bearer <jwt>` and `X-Token-Claims: <json>` headers
+- Results cached in shared memory for performance
+- Backend never validates JWT signatures - trusts Nginx
 
-- **Private key NEVER leaves the user's machine** - only used for TLS signatures
-- **Server only stores public certificate and fingerprint** - no secrets to steal
-- **TLS handshake proves identity** - browser cryptographically proves private key ownership
-- **Self-signed certificates supported** - like GitHub SSH keys, no CA required
-- Similar to GitHub SSH keys - upload public key, authenticate with private key
+## OpenFGA Authorization
 
-## Generating Your Own Certificate
+Fine-grained authorization using [OpenFGA](https://openfga.dev/) for hierarchical permission checks.
 
-Users can generate self-signed certificates like SSH keys:
+### Authorization Model
 
+```
+workspace
+  ├── owner   → user
+  ├── admin   → user | workspace:owner
+  ├── member  → user | workspace:admin
+  └── viewer  → user | workspace:member
+
+document
+  ├── workspace → workspace
+  ├── owner     → user
+  ├── editor    → user | document:owner | workspace:admin
+  └── viewer    → user | document:editor | workspace:member
+```
+
+### Protected Endpoints
+
+| Endpoint | Required Relation |
+|----------|-------------------|
+| `GET /api/workspaces/:id` | viewer |
+| `POST /api/workspaces/:id/settings` | admin |
+| `GET /api/workspaces/:id/documents/:docId` | viewer |
+| `PUT /api/workspaces/:id/documents/:docId` | editor |
+
+## Configuration as Code
+
+Realm configuration is defined as versioned YAML migrations in `keycloak/migrations/config-cli/`, applied automatically by keycloak-config-cli on startup:
+
+| Migration | Description |
+|-----------|-------------|
+| `000_baseline.yaml` | Realm, roles, users, clients |
+| `001_x509-authentication-flow.yaml` | Custom X.509 browser flow |
+| `002_x509-client-mappers.yaml` | Certificate attributes in tokens |
+| `003_public-realm.yaml` | Public realm for OpenFGA |
+| `004_pat-support.yaml` | PAT client configuration |
+| `005_pat-production.yaml` | PAT production settings |
+
+### Modifying Configuration
+
+Add a new numbered YAML file to `keycloak/migrations/config-cli/` and restart:
 ```bash
-# Generate certificate (like ssh-keygen)
-make gen-cert
-
-# Or specify output directory and identity
-./scripts/generate-self-signed-cert.sh ~/.x509 "John Doe" "john@example.com"
+make restart
 ```
 
-This creates:
-- `private.key.pem` - Keep secret (like `~/.ssh/id_rsa`)
-- `certificate.pem` - Upload to API (like `~/.ssh/id_rsa.pub`)
-- `certificate.p12` - Import to browser
-
-Then register with Keycloak and import to your browser (see script output for commands).
+Or export the current realm from a running instance:
+```bash
+make export-realm
+```
 
 ## Browser Setup for Certificate Authentication
 
@@ -294,137 +380,99 @@ Then register with Keycloak and import to your browser (see script output for co
 make import-certs
 
 # Or manually:
-# 1. Import CA as trusted root (requires sudo)
 sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/ca/ca.crt.pem
-
-# 2. Import client certificate
 security import certs/client/testuser/client.p12 -k ~/Library/Keychains/login.keychain-db -P changeit -A
 ```
 
 ### Other Systems
 
-1. **Import CA certificate:**
-   - File: `certs/ca/ca.crt.pem`
-   - Add to trusted root authorities
-
-2. **Import client certificate:**
-   - File: `certs/client/testuser/client.p12`
-   - Password: `changeit`
+1. Import CA certificate (`certs/ca/ca.crt.pem`) as trusted root
+2. Import client certificate (`certs/client/testuser/client.p12`, password: `changeit`)
 
 ### Test Authentication
 
-1. Visit: https://localhost/realms/x509-demo/account
-2. Browser should prompt for certificate selection
+1. Visit https://localhost/realms/x509-demo/account
+2. Browser prompts for certificate selection
 3. Select your imported certificate
-4. You should be logged in automatically
-
-## Configuration as Code
-
-The realm configuration in `keycloak/realm-config/x509-realm.json` includes:
-
-- **Realm settings:** SSL requirements, brute force protection, events
-- **Roles:** `user`, `admin`, `cert-manager`
-- **Users:** Pre-configured test users with attributes
-- **Clients:** `x509-demo-app` (public app), `cert-api-client` (service account)
-- **Authentication flows:** Custom X.509 browser flow with certificate-based authenticator
-- **Protocol mappers:** Include certificate attributes in tokens
-- **User profile:** Custom attributes for certificate storage
-
-### Modifying Configuration
-
-1. Edit `keycloak/realm-config/x509-realm.json`
-2. Restart Keycloak: `make restart`
-
-Or export from running Keycloak:
-```bash
-make export-realm
-```
+4. Logged in automatically (no password)
 
 ## Custom Provider Development
 
-The X.509 Certificate API is implemented as a Keycloak SPI (Service Provider Interface).
+Two Keycloak SPI (Service Provider Interface) extensions:
+
+### X.509 Certificate API (`keycloak/providers/x509-cert-api/`)
+
+| File | Purpose |
+|------|---------|
+| `X509CertificateResource.java` | REST endpoints for certificate CRUD |
+| `X509UserAttributeAuthenticator.java` | Authenticator that looks up users by cert fingerprint |
+| `X509UserAttributeAuthenticatorFactory.java` | Authenticator factory |
+
+### PAT API (`keycloak/providers/pat-api/`)
+
+| File | Purpose |
+|------|---------|
+| `PatResource.java` | REST endpoints for PAT create/list/revoke/exchange |
+| `PatResourceProvider.java` | Provider implementation |
+| `PatResourceProviderFactory.java` | Factory for Keycloak |
 
 ### Building
 
 ```bash
-make build
-make restart
+make build      # Build both providers
+make restart    # Restart to load
 ```
 
-### Key Components
+## Technology Stack
 
-| File | Description |
-|------|-------------|
-| `X509CertificateResource.java` | REST endpoints for certificate management |
-| `X509CertificateResourceProvider.java` | Provider implementation |
-| `X509CertificateResourceProviderFactory.java` | Factory for Keycloak |
-| `X509UserAttributeAuthenticator.java` | Custom authenticator for certificate lookup |
-| `X509UserAttributeAuthenticatorFactory.java` | Authenticator factory |
-
-### Adding New Endpoints
-
-1. Add method to `X509CertificateResource.java`
-2. Rebuild: `make build`
-3. Restart: `make restart`
-
-## Security Considerations
-
-- **Production use:** Replace self-signed certificates with proper CA-signed certificates
-- **Certificate validation:** Enable CRL/OCSP checking in production
-- **Key storage:** Protect private keys appropriately
-- **Rate limiting:** Add rate limiting to certificate API
-- **Audit logging:** Monitor certificate additions/removals
-- **HTTPS:** Always use HTTPS in production
+| Component | Technology | Version |
+|-----------|-----------|---------|
+| Identity Provider | Keycloak | 24.0 |
+| Gateway / Proxy | Nginx + njs | 1.27 |
+| Backend API | Express.js | Node 20 |
+| Frontend | React + Vite | Node 20 |
+| Authorization | OpenFGA | latest |
+| Database | PostgreSQL | 15 |
+| E2E Testing | Playwright | latest |
+| Provider Build | Maven | latest |
+| Containers | Docker Compose | latest |
 
 ## Troubleshooting
 
 ### Certificate not being passed to Keycloak
 
-Check Nginx logs:
 ```bash
 make logs-gateway
 ```
-
 Look for `ssl_client_verify="SUCCESS"` in the logs.
 
 ### Keycloak not starting
 
-Check Keycloak logs:
 ```bash
 make logs-keycloak
 ```
-
-Common issues:
-- Truststore not found or wrong password
-- Invalid realm configuration JSON
-- Provider JAR build issues
+Common issues: truststore not found, invalid configuration, provider JAR build issues.
 
 ### Cannot authenticate with certificate
 
-1. Run tests to verify setup: `make test`
-2. Verify certificate is registered: Check user attributes in Keycloak admin
+1. Run tests: `make test`
+2. Verify certificate is registered in Keycloak admin (user attributes)
 3. Check certificate fingerprint matches
-4. Ensure authentication flow is configured correctly
+4. Ensure X.509 browser flow is active
 
 ### macOS Keychain import fails
 
 If you see "MAC verification failed":
 ```bash
-# Regenerate PKCS12 with legacy algorithms
-make import-certs
+make import-certs   # Regenerates PKCS12 with compatible algorithms
 ```
 
 ### Tests failing
 
 ```bash
-# Check if services are running
-make logs
-
-# Restart services
-make restart
-
-# Run tests again
-make test
+make logs       # Check service logs
+make restart    # Restart services
+make test       # Re-run tests
 ```
 
 ## License
