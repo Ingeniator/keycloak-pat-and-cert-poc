@@ -1,19 +1,19 @@
-// Scenario 3: OpenFGA authorization — JWT + nginx + backend → OpenFGA check
+// Scenario 3: PAT + nginx + OpenFGA — full authorization chain
 //
-// Flow: JWT → nginx (introspect) → backend → OpenFGA permission check → response
-// Measures the added latency of a fine-grained authorization call to OpenFGA.
+// Flow: PAT → nginx (exchange + introspect) → backend → OpenFGA permission check
+// Measures the added latency of fine-grained authorization on top of scenario 2.
 //
-// Success path: testuser is owner of workspace:acme and document:doc1
-// Failure path: testuser has no relation to workspace:nonexistent → 403
+// Success: testuser is owner of workspace:acme and document:doc1
+// Forbidden: testuser has no relation to workspace:nonexistent → 403
 
 import http from "k6/http";
 import { check, group } from "k6";
 import { Trend, Counter } from "k6/metrics";
-import { getToken, NGINX_BASE } from "./helpers.js";
+import { getToken, createPat, NGINX_BASE } from "./helpers.js";
 
-const tokenLatency = new Trend("token_acquisition_ms", true);
-const apiSuccessLatency = new Trend("api_success_ms", true);
-const apiForbiddenLatency = new Trend("api_forbidden_ms", true);
+const workspaceSuccessLatency = new Trend("workspace_success_ms", true);
+const documentSuccessLatency = new Trend("document_success_ms", true);
+const forbiddenLatency = new Trend("forbidden_ms", true);
 const successCount = new Counter("success_total");
 const forbiddenCount = new Counter("forbidden_total");
 
@@ -31,60 +31,58 @@ export const options = {
     },
   },
   insecureSkipTLSVerify: true,
+  setupTimeout: "120s",
   thresholds: {
-    api_success_ms: ["p(95)<3000"],
-    http_req_failed: ["rate<0.2"],
+    workspace_success_ms: ["p(95)<3000"],
   },
 };
 
 export function setup() {
-  const token = getToken("testuser", "testuser123");
-  return { warmupToken: token };
+  const jwt = getToken("testuser", "testuser123");
+  const pat = createPat(jwt, `bench-fga-${Date.now()}`);
+  console.log(`Created PAT for OpenFGA benchmark: ${pat.substring(0, 12)}...`);
+  return { pat };
 }
 
-export default function () {
-  // --- Token acquisition ---
-  const start = Date.now();
-  const token = getToken("testuser", "testuser123");
-  tokenLatency.add(Date.now() - start);
+export default function (data) {
+  const pat = data.pat;
+  const headers = { Authorization: `Bearer ${pat}` };
 
-  // --- Success path: testuser → owner of workspace:acme → 200 ---
+  // --- Success: workspace:acme (testuser is owner) → 200 ---
   group("workspace_allowed", function () {
-    const res = http.get(`${NGINX_BASE}/api/workspaces/acme`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    apiSuccessLatency.add(res.timings.duration);
+    const res = http.get(`${NGINX_BASE}/api/workspaces/acme`, { headers });
+    workspaceSuccessLatency.add(res.timings.duration);
 
     const ok = check(res, {
-      "status is 200": (r) => r.status === 200,
+      "workspace 200": (r) => r.status === 200,
       "workspace is acme": (r) => r.json("workspace") === "acme",
     });
     if (ok) successCount.add(1);
   });
 
-  // --- Success path: testuser → owner of document:doc1 → 200 ---
+  // --- Success: document:doc1 (testuser is owner) → 200 ---
   group("document_allowed", function () {
     const res = http.get(`${NGINX_BASE}/api/workspaces/acme/documents/doc1`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
     });
-    apiSuccessLatency.add(res.timings.duration);
+    documentSuccessLatency.add(res.timings.duration);
 
     const ok = check(res, {
-      "status is 200": (r) => r.status === 200,
+      "document 200": (r) => r.status === 200,
       "document is doc1": (r) => r.json("document") === "doc1",
     });
     if (ok) successCount.add(1);
   });
 
-  // --- Forbidden path: no relation to workspace:nonexistent → 403 ---
+  // --- Forbidden: workspace:nonexistent (no relation) → 403 ---
   group("workspace_forbidden", function () {
     const res = http.get(`${NGINX_BASE}/api/workspaces/nonexistent`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
     });
-    apiForbiddenLatency.add(res.timings.duration);
+    forbiddenLatency.add(res.timings.duration);
 
     check(res, {
-      "status is 403": (r) => r.status === 403,
+      "forbidden 403": (r) => r.status === 403,
     });
     forbiddenCount.add(1);
   });

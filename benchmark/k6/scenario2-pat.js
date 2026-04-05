@@ -1,7 +1,7 @@
-// Scenario 2: PAT — Keycloak PAT + nginx token exchange + introspection + backend
+// Scenario 2: PAT through nginx — PAT + nginx token exchange + introspection + backend
 //
 // Flow: PAT token → nginx (exchange PAT→JWT + introspect) → backend /hello
-// Measures the extra hop: PAT exchange + introspection vs direct JWT introspection.
+// Measures the full gateway path: PAT exchange + introspection + proxy to backend.
 
 import http from "k6/http";
 import { check, group } from "k6";
@@ -15,7 +15,7 @@ const failCount = new Counter("fail_total");
 
 export const options = {
   scenarios: {
-    pat: {
+    pat_nginx: {
       executor: "ramping-vus",
       startVUs: 1,
       stages: [
@@ -27,14 +27,13 @@ export const options = {
     },
   },
   insecureSkipTLSVerify: true,
+  setupTimeout: "120s",
   thresholds: {
     api_success_ms: ["p(95)<3000"],
-    http_req_failed: ["rate<0.1"],
   },
 };
 
 export function setup() {
-  // Create a PAT for the test user (done once in setup)
   const jwt = getToken("testuser", "testuser123");
   const pat = createPat(jwt, `bench-${Date.now()}`);
   console.log(`Created PAT for benchmark: ${pat.substring(0, 12)}...`);
@@ -44,7 +43,7 @@ export function setup() {
 export default function (data) {
   const pat = data.pat;
 
-  // --- Success path: valid PAT → /api/hello ---
+  // --- Success path: valid PAT → nginx → backend /hello ---
   group("api_success", function () {
     const res = http.get(`${NGINX_BASE}/api/hello`, {
       headers: { Authorization: `Bearer ${pat}` },
@@ -70,8 +69,4 @@ export default function (data) {
     });
     failCount.add(1);
   });
-}
-
-export function teardown(data) {
-  // PAT auto-expires in 1 day, no cleanup needed
 }

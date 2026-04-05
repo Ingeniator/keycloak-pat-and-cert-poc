@@ -5,7 +5,8 @@ const REALM = "public";
 const CLIENT_ID = "ui-bff";
 const CLIENT_SECRET = "bff-secret";
 
-export const NGINX_BASE = "https://nginx-proxy:443";
+export const NGINX_BASE = "https://nginx:443";
+export const BACKEND_BASE = "http://backend:3001";
 
 export function getToken(username, password) {
   const res = http.post(
@@ -39,7 +40,7 @@ export function createPat(accessToken, name) {
     }
   );
 
-  if (res.status !== 200) {
+  if (res.status !== 200 && res.status !== 201) {
     throw new Error(`PAT creation failed: ${res.status} ${res.body}`);
   }
 
