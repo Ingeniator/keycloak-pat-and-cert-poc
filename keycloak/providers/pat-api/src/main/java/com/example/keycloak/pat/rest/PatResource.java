@@ -18,6 +18,8 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
@@ -36,6 +38,14 @@ public class PatResource {
 
     private static final int MAX_PATS_PER_USER = 10;
     private static final String BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    // Serialize PAT writes per user to prevent Postgres row-lock contention on user_attribute
+    // rows. Multiple concurrent attribute updates on the same user caused transaction rollbacks.
+    private static final ConcurrentMap<String, Object> USER_WRITE_LOCKS = new ConcurrentHashMap<>();
+
+    private static Object writeLockFor(String userId) {
+        return USER_WRITE_LOCKS.computeIfAbsent(userId, k -> new Object());
+    }
 
     private final KeycloakSession session;
     private final AuthenticationManager.AuthResult auth;
@@ -129,13 +139,6 @@ public class PatResource {
                     .build();
         }
 
-        List<String> existingIds = user.getAttributeStream(ATTR_PAT_ID).toList();
-        if (existingIds.size() >= MAX_PATS_PER_USER) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", "Maximum " + MAX_PATS_PER_USER + " tokens allowed"))
-                    .build();
-        }
-
         try {
             String rawToken = generateToken();
             String hash = sha256Hex(rawToken);
@@ -149,13 +152,17 @@ public class PatResource {
                 expiresAt = Instant.now().plusSeconds((long) request.expiresInDays * 86400).toString();
             }
 
-            addAttribute(user, ATTR_PAT_ID, id);
-            addAttribute(user, ATTR_PAT_NAME, request.name);
-            addAttribute(user, ATTR_PAT_HASH, hash);
-            addAttribute(user, ATTR_PAT_SCOPES, tokenScopes);
-            addAttribute(user, ATTR_PAT_CREATED_AT, now);
-            addAttribute(user, ATTR_PAT_EXPIRES_AT, expiresAt);
-            addAttribute(user, ATTR_PAT_LAST_USED_AT, "never");
+            // Lock per-user to serialize concurrent PAT writes and avoid DB lock contention
+            synchronized (writeLockFor(user.getId())) {
+                List<String> existingIds = user.getAttributeStream(ATTR_PAT_ID).toList();
+                if (existingIds.size() >= MAX_PATS_PER_USER) {
+                    return Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "Maximum " + MAX_PATS_PER_USER + " tokens allowed"))
+                            .build();
+                }
+
+                appendPat(user, id, request.name, hash, tokenScopes, now, expiresAt);
+            }
 
             LOGGER.info("PAT created for user " + user.getUsername() + " id=" + id + " name=" + request.name);
 
@@ -186,21 +193,17 @@ public class PatResource {
             return unauthorized();
         }
 
-        List<String> ids = new ArrayList<>(user.getAttributeStream(ATTR_PAT_ID).toList());
-        int index = ids.indexOf(id);
-        if (index == -1) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(Map.of("error", "Token not found"))
-                    .build();
-        }
+        synchronized (writeLockFor(user.getId())) {
+            List<String> ids = new ArrayList<>(user.getAttributeStream(ATTR_PAT_ID).toList());
+            int index = ids.indexOf(id);
+            if (index == -1) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "Token not found"))
+                        .build();
+            }
 
-        removeAttributeAtIndex(user, ATTR_PAT_ID, index);
-        removeAttributeAtIndex(user, ATTR_PAT_NAME, index);
-        removeAttributeAtIndex(user, ATTR_PAT_HASH, index);
-        removeAttributeAtIndex(user, ATTR_PAT_SCOPES, index);
-        removeAttributeAtIndex(user, ATTR_PAT_CREATED_AT, index);
-        removeAttributeAtIndex(user, ATTR_PAT_EXPIRES_AT, index);
-        removeAttributeAtIndex(user, ATTR_PAT_LAST_USED_AT, index);
+            removePatAtIndex(user, index);
+        }
 
         LOGGER.info("PAT deleted for user " + user.getUsername() + " id=" + id);
 
@@ -258,8 +261,8 @@ public class PatResource {
                 }
             }
 
-            // Update last_used_at
-            updateAttributeAtIndex(user, ATTR_PAT_LAST_USED_AT, index, Instant.now().toString());
+            // Skip last_used_at update during exchange — it caused massive row accumulation
+            // under load due to cache/DB inconsistency. Track usage via Keycloak events instead.
 
             // Issue a real Keycloak access token
             String clientId = PatResourceProviderFactory.getPatClientId();
@@ -274,7 +277,9 @@ public class PatResource {
             // Set client in Keycloak context (required for TokenManager)
             session.getContext().setClient(client);
 
-            // Create user session (must be persistent for introspection to work)
+            // Persistent session — required for token introspection to work.
+            // The nginx PAT flow caches exchange + introspection results, so under steady
+            // load only a few sessions are created per cache TTL cycle.
             UserSessionModel userSession = session.sessions().createUserSession(
                     null, realm, user, user.getUsername(),
                     "127.0.0.1", "pat-exchange", false, null, null,
@@ -368,6 +373,30 @@ public class PatResource {
         List<String> values = new ArrayList<>(user.getAttributeStream(attrName).toList());
         values.add(value);
         user.setAttribute(attrName, values);
+    }
+
+    // Append a PAT by updating all 7 PAT attributes. Caller must hold the per-user write lock.
+    private void appendPat(UserModel user, String id, String name, String hash, String scopes,
+                           String createdAt, String expiresAt) {
+        addAttribute(user, ATTR_PAT_ID, id);
+        addAttribute(user, ATTR_PAT_NAME, name);
+        addAttribute(user, ATTR_PAT_HASH, hash);
+        addAttribute(user, ATTR_PAT_SCOPES, scopes);
+        addAttribute(user, ATTR_PAT_CREATED_AT, createdAt);
+        addAttribute(user, ATTR_PAT_EXPIRES_AT, expiresAt);
+        addAttribute(user, ATTR_PAT_LAST_USED_AT, "never");
+    }
+
+    // Remove PAT at the given index from all 7 PAT attributes. Caller must hold the per-user
+    // write lock.
+    private void removePatAtIndex(UserModel user, int index) {
+        removeAttributeAtIndex(user, ATTR_PAT_ID, index);
+        removeAttributeAtIndex(user, ATTR_PAT_NAME, index);
+        removeAttributeAtIndex(user, ATTR_PAT_HASH, index);
+        removeAttributeAtIndex(user, ATTR_PAT_SCOPES, index);
+        removeAttributeAtIndex(user, ATTR_PAT_CREATED_AT, index);
+        removeAttributeAtIndex(user, ATTR_PAT_EXPIRES_AT, index);
+        removeAttributeAtIndex(user, ATTR_PAT_LAST_USED_AT, index);
     }
 
     private void removeAttributeAtIndex(UserModel user, String attrName, int index) {

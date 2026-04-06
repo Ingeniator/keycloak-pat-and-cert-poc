@@ -40,6 +40,19 @@ function cacheKey(prefix, token) {
   return prefix + h.digest("hex").substring(0, 16);
 }
 
+function decodeJwtPayload(token) {
+  try {
+    var parts = token.split(".");
+    if (parts.length !== 3) return null;
+    // Base64url decode the payload (2nd segment)
+    var payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    var decoded = Buffer.from(payload, "base64").toString();
+    return JSON.parse(decoded);
+  } catch (e) {
+    return null;
+  }
+}
+
 function filterClaims(claims) {
   return {
     sub: claims.sub,
@@ -175,7 +188,13 @@ async function resolvePatFromRequest(r) {
       return true;
     }
 
-    var claims = await introspect(accessToken);
+    // Decode claims directly from the JWT — it was just issued by Keycloak during
+    // exchange, so it's trustworthy. This skips the introspection HTTP call.
+    var claims = decodeJwtPayload(accessToken);
+    if (!claims) {
+      // Fallback to introspection if JWT decode fails
+      claims = await introspect(accessToken);
+    }
     if (!claims) {
       r.return(401, '{"error":"Token introspection failed"}');
       return true;

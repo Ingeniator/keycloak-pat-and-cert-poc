@@ -17,11 +17,10 @@ services:
       retries: 5
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    build: ./keycloak
     container_name: keycloak
     environment:
       # Database
-      KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-keycloak}
       KC_DB_USERNAME: ${POSTGRES_USER:-keycloak}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-keycloak_password}
@@ -35,23 +34,17 @@ services:
       KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
       KC_HOSTNAME_STRICT: false
       KC_HOSTNAME_STRICT_HTTPS: true
-      KC_HTTP_ENABLED: true
 
       # X.509 Client Certificate Authentication
-      KC_HTTPS_CLIENT_AUTH: request
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/server/server.crt.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/server/server.key.pem
       KC_HTTPS_TRUST_STORE_FILE: /opt/keycloak/certs-root/truststore.jks
       KC_HTTPS_TRUST_STORE_PASSWORD: ${TRUSTSTORE_PASSWORD:-changeit}
 
-      # Features (declarative-user-profile is now built-in)
-      KC_FEATURES: preview
-
       # Logging
       KC_LOG_LEVEL: INFO,com.example.keycloak:DEBUG,org.keycloak.services.x509:DEBUG
 
       # X.509 Certificate Lookup from Nginx headers
-      KC_SPI_X509CERT_LOOKUP_PROVIDER: nginx
       KC_SPI_X509CERT_LOOKUP_NGINX_SSL_CLIENT_CERT: SSL_CLIENT_CERT
       KC_SPI_X509CERT_LOOKUP_NGINX_SSL_CERT_CHAIN_PREFIX: SSL_CLIENT_CERT_CHAIN
 
@@ -63,7 +56,8 @@ services:
       - "8080:8080"
 
     command:
-      - start-dev
+      - start
+      - --optimized
       - --spi-x509cert-lookup-nginx-ssl-client-cert=SSL_CLIENT_CERT
 
     volumes:
