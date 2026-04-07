@@ -1,5 +1,5 @@
 import express from "express";
-import { requirePermission } from "./authz.js";
+import { requirePermission, batchCheckPermissions } from "./authz.js";
 
 const PORT = process.env.PORT || 3001;
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || "http://keycloak:8080";
@@ -92,6 +92,30 @@ app.get("/workspaces/:workspaceId/documents/:documentId", requireAuth, requirePe
 
 app.put("/workspaces/:workspaceId/documents/:documentId", requireAuth, requirePermission("document", "documentId", "editor"), (req, res) => {
   res.json({ workspace: req.params.workspaceId, document: req.params.documentId, updated: true });
+});
+
+// Batch permission check — single HTTP call to OpenFGA for multiple tuples
+app.post("/check-permissions", requireAuth, async (req, res) => {
+  const userId = req.user?.preferred_username || req.user?.sub;
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const { checks } = req.body;
+  if (!Array.isArray(checks) || checks.length === 0) {
+    return res.status(400).json({ error: "checks array required" });
+  }
+
+  try {
+    const results = await Promise.race([
+      batchCheckPermissions(userId, checks),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Batch check timed out")), 5000)
+      ),
+    ]);
+    res.json({ results: checks.map((c, i) => ({ ...c, allowed: results[i] })) });
+  } catch (err) {
+    console.error("Batch OpenFGA check failed:", err.message);
+    res.status(500).json({ error: "Authorization check failed" });
+  }
 });
 
 // OpenAI-compatible chat completions (hardcoded response)

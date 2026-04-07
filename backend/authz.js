@@ -32,6 +32,18 @@ export async function checkPermission(userId, objectType, objectId, relation) {
   return allowed;
 }
 
+export async function batchCheckPermissions(userId, checks) {
+  const client = await getClient();
+  const { responses } = await client.batchCheck(
+    checks.map((c) => ({
+      user: `user:${userId}`,
+      relation: c.relation,
+      object: `${c.objectType}:${c.objectId}`,
+    }))
+  );
+  return responses.map((r) => !!r.allowed);
+}
+
 export function requirePermission(objectType, paramName, relation) {
   return async (req, res, next) => {
     const objectId = req.params[paramName];

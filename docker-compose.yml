@@ -109,6 +109,7 @@ services:
       POSTGRES_DB: ${OPENFGA_POSTGRES_DB:-openfga}
       POSTGRES_USER: ${OPENFGA_POSTGRES_USER:-openfga}
       POSTGRES_PASSWORD: ${OPENFGA_POSTGRES_PASSWORD:-openfga_password}
+    command: ["postgres", "-c", "max_connections=300"]
     volumes:
       - openfga_postgres_data:/var/lib/postgresql/data
     networks:
@@ -139,6 +140,7 @@ services:
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
       OPENFGA_DATASTORE_URI: postgres://${OPENFGA_POSTGRES_USER:-openfga}:${OPENFGA_POSTGRES_PASSWORD:-openfga_password}@openfga-postgres:5432/${OPENFGA_POSTGRES_DB:-openfga}?sslmode=disable
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: "200"
       OPENFGA_HTTP_ADDR: 0.0.0.0:8081
       OPENFGA_GRPC_ADDR: 0.0.0.0:8082
     ports:
