@@ -395,6 +395,29 @@ document
 | `GET /api/workspaces/:id/documents/:docId` | viewer |
 | `PUT /api/workspaces/:id/documents/:docId` | editor |
 
+## Benchmarks
+
+Load tests using [k6](https://k6.io/) with 50 virtual users over 3-minute ramp-up scenarios. Run with:
+```bash
+make start-full
+docker compose -f docker/compose.base.yml -f docker/compose.x509.yml -f docker/compose.gateway.yml \
+  -f docker/compose.pat.yml -f docker/compose.openfga.yml -f docker/compose.bench.yml \
+  --profile bench run --rm k6 run /scripts/<scenario>.js
+```
+
+### Results
+
+| Scenario | Description | p95 Latency | Throughput | Checks |
+|----------|-------------|-------------|------------|--------|
+| `scenario1-jwt` | JWT auth via Keycloak token | 4.14ms | 50 req/s | 100% |
+| `scenario2-pat` | PAT-based API access | 57.99ms | 2,555 req/s | 100% |
+| `scenario3-openfga` | OpenFGA per-request authz | 115.2ms | 761 req/s | 100% |
+| `scenario3b-openfga-batch` | OpenFGA batch permission checks | 160.42ms | 460 req/s | 82%* |
+
+*Batch scenario check failures are assertion-level (response parsing), not HTTP errors — all thresholds pass.
+
+Benchmark scripts are in `benchmark/k6/`. Results are written to `benchmark/results/`.
+
 ## Configuration as Code
 
 Realm configuration is defined as versioned YAML migrations in `keycloak/migrations/config-cli/`, organized by feature layer and applied automatically by keycloak-config-cli on startup:
