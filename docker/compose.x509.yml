@@ -1,0 +1,11 @@
+# Layer 1: X.509 Certificate Authentication
+# Adds x509 auth flow and client mapper migrations.
+# Provider JARs are already mounted via keycloak volumes in compose.base.yml.
+# Merges with compose.base.yml via: docker compose -f compose.base.yml -f compose.x509.yml
+
+services:
+  keycloak-config-cli:
+    environment:
+      IMPORT_FILES_LOCATIONS: "/config/core/*,/config/x509/*"
+    volumes:
+      - ../keycloak/migrations/config-cli/x509:/config/x509:ro

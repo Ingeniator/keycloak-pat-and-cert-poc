@@ -66,7 +66,7 @@ fi
 echo ""
 echo "Test 2: Certificate passed through nginx"
 # Check nginx logs for successful client cert verification
-NGINX_LOG=$(docker compose logs nginx --tail 5 2>&1 | grep -c 'ssl_client_verify="SUCCESS"' || echo "0")
+NGINX_LOG=$(docker logs nginx-proxy --tail 5 2>&1 | grep -c 'ssl_client_verify="SUCCESS"' || echo "0")
 
 if [ "$NGINX_LOG" -gt 0 ]; then
     pass "Nginx verifies client certificate"
@@ -75,7 +75,7 @@ else
     curl -sk --cert "$CERT_FILE" --key "$KEY_FILE" --cacert "$CA_FILE" \
         "$BASE_URL/realms/$REALM/account" -o /dev/null 2>&1
     sleep 1
-    NGINX_LOG=$(docker compose logs nginx --tail 5 2>&1 | grep -c 'ssl_client_verify="SUCCESS"' || echo "0")
+    NGINX_LOG=$(docker logs nginx-proxy --tail 5 2>&1 | grep -c 'ssl_client_verify="SUCCESS"' || echo "0")
     if [ "$NGINX_LOG" -gt 0 ]; then
         pass "Nginx verifies client certificate"
     else
@@ -106,7 +106,7 @@ fi
 # Test 4: Keycloak logs show successful auth
 echo ""
 echo "Test 4: Keycloak processes certificate authentication"
-KEYCLOAK_LOG=$(docker compose logs keycloak --tail 20 2>&1 | grep -c "authenticated via X.509 certificate" || echo "0")
+KEYCLOAK_LOG=$(docker logs keycloak --tail 20 2>&1 | grep -c "authenticated via X.509 certificate" || echo "0")
 
 if [ "$KEYCLOAK_LOG" -gt 0 ]; then
     pass "Keycloak authenticates user via X.509 certificate"

@@ -1,0 +1,21 @@
+# Benchmarking — k6 load testing
+# Usage: docker compose -f ... --profile bench up k6
+
+services:
+  k6:
+    image: grafana/k6:latest
+    container_name: k6-bench
+    volumes:
+      - ../benchmark/k6:/scripts:ro
+      - ../benchmark/results:/results
+    networks:
+      - keycloak-network
+    depends_on:
+      nginx:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+    profiles:
+      - bench

@@ -1,0 +1,65 @@
+# Layer 2: OIDC Gateway + UI + Backend API
+# Adds Nginx reverse proxy with OIDC/phantom-token handling,
+# React frontend, and Express.js backend (without OpenFGA).
+
+services:
+  backend:
+    build: ../backend
+    container_name: keycloak-backend
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      REALM: public
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/hello 2>&1 | head -1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  ui:
+    build: ../ui
+    container_name: keycloak-ui
+    ports:
+      - "5173:80"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ 2>&1 | head -1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  nginx:
+    build: ../gateway
+    container_name: nginx-proxy
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ../gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../gateway/conf.d:/etc/nginx/conf.d:ro
+      - ../gateway/njs/oidc.js:/etc/nginx/njs/oidc.js.template:ro
+      - ../gateway/njs/pat.js:/etc/nginx/njs/pat.js.template:ro
+      - ../certs/server:/etc/nginx/certs:ro
+      - ../certs/ca:/etc/nginx/ca:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - keycloak-network

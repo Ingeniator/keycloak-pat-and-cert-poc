@@ -5,7 +5,7 @@
 # Author: DevOps Team
 # Date: 2026-04-03
 
-realm: "$(env:REALM_NAME:-public)"
+realm: "public"
 enabled: true
 
 # ---------------------------------------------------------------------------
@@ -107,6 +107,41 @@ userProfile:
 # Set KC_SPI_REALM_RESTAPI_EXTENSION_PAT_API_CLIENT_ID to match clientId below.
 
 clients:
+  # Preserve ui-bff from 004 (keycloak-config-cli removes unmanaged clients)
+  - clientId: "ui-bff"
+    name: "UI Backend-for-Frontend"
+    description: "Confidential client for phantom token pattern"
+    enabled: true
+    publicClient: false
+    clientAuthenticatorType: "client-secret"
+    secret: "bff-secret"
+    protocol: "openid-connect"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: true
+    serviceAccountsEnabled: false
+    fullScopeAllowed: true
+
+    attributes:
+      access.token.lightweight: "true"
+
+    redirectUris:
+      - "https://localhost/auth/callback"
+
+    webOrigins:
+      - "https://localhost"
+
+    defaultClientScopes:
+      - "web-origins"
+      - "acr"
+      - "profile"
+      - "roles"
+      - "email"
+    optionalClientScopes:
+      - "address"
+      - "phone"
+      - "offline_access"
+
   - clientId: "$(env:PAT_CLIENT_ID:-pat-exchange)"
     name: "PAT Exchange Client"
     description: "Confidential client for PAT-to-JWT exchange. Used internally by the pat-api SPI provider."

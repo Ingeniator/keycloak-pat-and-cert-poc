@@ -1,3 +1,7 @@
+# Full stack — all feature layers combined.
+# For running individual layers, use: make start-core, start-x509, etc.
+# See docker/ directory for the layered compose files.
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -17,10 +21,11 @@ services:
       retries: 5
 
   keycloak:
-    build: ./keycloak
+    image: quay.io/keycloak/keycloak:24.0
     container_name: keycloak
     environment:
       # Database
+      KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-keycloak}
       KC_DB_USERNAME: ${POSTGRES_USER:-keycloak}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-keycloak_password}
@@ -34,30 +39,34 @@ services:
       KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
       KC_HOSTNAME_STRICT: false
       KC_HOSTNAME_STRICT_HTTPS: true
+      KC_HTTP_ENABLED: true
 
       # X.509 Client Certificate Authentication
+      KC_HTTPS_CLIENT_AUTH: request
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/server/server.crt.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/server/server.key.pem
       KC_HTTPS_TRUST_STORE_FILE: /opt/keycloak/certs-root/truststore.jks
       KC_HTTPS_TRUST_STORE_PASSWORD: ${TRUSTSTORE_PASSWORD:-changeit}
 
+      # Features (declarative-user-profile is now built-in)
+      KC_FEATURES: preview
+
       # Logging
       KC_LOG_LEVEL: INFO,com.example.keycloak:DEBUG,org.keycloak.services.x509:DEBUG
 
       # X.509 Certificate Lookup from Nginx headers
+      KC_SPI_X509CERT_LOOKUP_PROVIDER: nginx
       KC_SPI_X509CERT_LOOKUP_NGINX_SSL_CLIENT_CERT: SSL_CLIENT_CERT
       KC_SPI_X509CERT_LOOKUP_NGINX_SSL_CERT_CHAIN_PREFIX: SSL_CLIENT_CERT_CHAIN
 
       # Trusted CA for email fallback authentication (optional)
-      # If set, users with CA-signed certs can authenticate by email without pre-registering
       X509_TRUSTED_CA_CERT_PATH: /opt/keycloak/certs/ca/ca.crt.pem
 
     ports:
       - "8080:8080"
 
     command:
-      - start
-      - --optimized
+      - start-dev
       - --spi-x509cert-lookup-nginx-ssl-client-cert=SSL_CLIENT_CERT
 
     volumes:
@@ -95,12 +104,16 @@ services:
       REALM_NAME: ${REALM_NAME:-x509-demo}
       CLIENT_ID: ${CLIENT_ID:-x509-demo-app}
     volumes:
-      - ./keycloak/migrations/config-cli:/config:ro
+      - ./keycloak/migrations/config-cli/core:/config/core:ro
+      - ./keycloak/migrations/config-cli/x509:/config/x509:ro
+      - ./keycloak/migrations/config-cli/pat:/config/pat:ro
     depends_on:
       keycloak:
         condition: service_healthy
     networks:
       - keycloak-network
+
+  # --- Layer 4: OpenFGA ---
 
   openfga-postgres:
     image: postgres:15-alpine
@@ -109,7 +122,6 @@ services:
       POSTGRES_DB: ${OPENFGA_POSTGRES_DB:-openfga}
       POSTGRES_USER: ${OPENFGA_POSTGRES_USER:-openfga}
       POSTGRES_PASSWORD: ${OPENFGA_POSTGRES_PASSWORD:-openfga_password}
-    command: ["postgres", "-c", "max_connections=300"]
     volumes:
       - openfga_postgres_data:/var/lib/postgresql/data
     networks:
@@ -140,7 +152,6 @@ services:
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
       OPENFGA_DATASTORE_URI: postgres://${OPENFGA_POSTGRES_USER:-openfga}:${OPENFGA_POSTGRES_PASSWORD:-openfga_password}@openfga-postgres:5432/${OPENFGA_POSTGRES_DB:-openfga}?sslmode=disable
-      OPENFGA_DATASTORE_MAX_OPEN_CONNS: "200"
       OPENFGA_HTTP_ADDR: 0.0.0.0:8081
       OPENFGA_GRPC_ADDR: 0.0.0.0:8082
     ports:
@@ -167,6 +178,8 @@ services:
         condition: service_healthy
     networks:
       - keycloak-network
+
+  # --- Layer 2: Gateway + App ---
 
   backend:
     build: ./backend
@@ -218,11 +231,21 @@ services:
       - ./certs/server:/etc/nginx/certs:ro
       - ./certs/ca:/etc/nginx/ca:ro
     depends_on:
-      - keycloak
-      - ui
-      - backend
+      keycloak:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - keycloak-network
+
+  # --- Benchmarking ---
 
   k6:
     image: grafana/k6:latest
@@ -232,6 +255,13 @@ services:
       - ./benchmark/results:/results
     networks:
       - keycloak-network
+    depends_on:
+      nginx:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
     profiles:
       - bench
 

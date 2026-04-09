@@ -1,0 +1,12 @@
+# Layer 3: Personal Access Tokens
+# Adds PAT realm configuration and migrations.
+# PAT provider JAR is already mounted via keycloak volumes in compose.base.yml.
+# PAT njs module is already mounted via nginx volumes in compose.gateway.yml.
+# Merges with lower layers via: docker compose -f ... -f compose.pat.yml
+
+services:
+  keycloak-config-cli:
+    environment:
+      IMPORT_FILES_LOCATIONS: "/config/core/*,/config/x509/*,/config/pat/*"
+    volumes:
+      - ../keycloak/migrations/config-cli/pat:/config/pat:ro

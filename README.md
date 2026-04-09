@@ -44,11 +44,48 @@ A demonstration project showing X.509 certificate authentication with Keycloak b
                                                 └─────────────┘
 ```
 
+## Feature Layers
+
+The project is structured as composable layers, each building on the one below. You can run any subset:
+
+```
+Layer 4: OpenFGA          Fine-grained authorization (workspaces, documents)
+Layer 3: PAT              Personal access tokens for API automation
+Layer 2: Gateway + App    Nginx OIDC gateway, React UI, Express backend
+Layer 1: X.509 Auth       Certificate authentication flow + migrations
+Layer 0: Core             Keycloak + PostgreSQL + baseline realm
+```
+
+### Running Individual Layers
+
+```bash
+make start-core     # Just Keycloak + PostgreSQL
+make start-x509     # + X.509 auth flow
+make start-gateway  # + Nginx, UI, backend (no OpenFGA)
+make start-pat      # + PAT support
+make start-full     # + OpenFGA (everything)
+make start          # Full stack (same as start-full, default)
+```
+
+Each layer includes all layers below it. The layered compose files live in `docker/` and are merged via `-f` flags. The top-level `docker-compose.yml` is the full stack for `docker compose up -d` compatibility.
+
+You can also compose layers directly:
+```bash
+docker compose -f docker/compose.base.yml -f docker/compose.x509.yml up -d
+```
+
 ## Project Structure
 
 ```
 keycloak_x509_demo/
-├── docker-compose.yml              # Service orchestration (10 services)
+├── docker-compose.yml              # Full stack (includes all layers)
+├── docker/                         # Layered compose files
+│   ├── compose.base.yml            # Layer 0: Keycloak + PostgreSQL
+│   ├── compose.x509.yml            # Layer 1: X.509 auth migrations
+│   ├── compose.gateway.yml         # Layer 2: Nginx + UI + backend
+│   ├── compose.pat.yml             # Layer 3: PAT migrations
+│   ├── compose.openfga.yml         # Layer 4: OpenFGA stack
+│   └── compose.bench.yml           # Benchmarking (k6)
 ├── .env.example                    # Environment variables template
 ├── Makefile                        # Build, test, and utility commands
 ├── keycloak/
@@ -56,7 +93,10 @@ keycloak_x509_demo/
 │   │   ├── x509-cert-api/          # Certificate management API (Maven)
 │   │   └── pat-api/                # Personal Access Token API (Maven)
 │   ├── migrations/                 # Realm configuration as code
-│   │   ├── config-cli/             # Versioned YAML migrations (000-005)
+│   │   ├── config-cli/
+│   │   │   ├── core/               # Baseline realm, roles, users, clients
+│   │   │   ├── x509/              # X.509 auth flow + client mappers
+│   │   │   └── pat/               # PAT realm + token support
 │   │   └── scripts/                # Migration & admin scripts
 │   └── conf/
 │       └── quarkus.properties      # Keycloak Quarkus settings
@@ -156,44 +196,53 @@ Client certificate password (for .p12 files): `changeit`
 
 ```bash
 # Setup & Build
-make setup          # Complete setup (certs + build + start)
-make certs          # Generate certificates only
-make build          # Build both custom providers (x509 + pat)
-make build-pat      # Build PAT provider only
-make start          # Start Docker services
-make stop           # Stop Docker services
-make restart        # Restart Docker services
+make setup           # Complete setup (certs + build + start)
+make certs           # Generate certificates only
+make build           # Build both custom providers (x509 + pat)
+make build-pat       # Build PAT provider only
+
+# Feature Layers (each includes all layers below it)
+make start-core      # Layer 0: Keycloak + PostgreSQL
+make start-x509      # Layer 1: + X.509 certificate auth
+make start-gateway   # Layer 2: + Nginx gateway, UI, backend
+make start-pat       # Layer 3: + Personal access tokens
+make start-full      # Layer 4: + OpenFGA authorization
+make start           # Full stack (all layers, default)
+
+# Service Management
+make stop            # Stop Docker services
+make restart         # Restart Docker services
+make clean           # Remove all generated files
 
 # Logs
-make logs           # View all logs
-make logs-keycloak  # View Keycloak logs
-make logs-gateway   # View Gateway (Nginx) logs
-make logs-openfga   # View OpenFGA logs
+make logs            # View all logs
+make logs-keycloak   # View Keycloak logs
+make logs-gateway    # View Gateway (Nginx) logs
+make logs-openfga    # View OpenFGA logs
 
 # Testing
-make test           # Run all tests
-make test-health    # Infrastructure health checks
-make test-setup     # Register test certificates
-make test-api       # Certificate management API tests
-make test-cert      # Certificate authentication tests
-make test-pat       # Personal access token tests
-make test-openfga   # OpenFGA authorization tests
-make test-e2e       # Playwright browser tests
+make test            # Run all tests
+make test-health     # Infrastructure health checks
+make test-setup      # Register test certificates
+make test-api        # Certificate management API tests
+make test-cert       # Certificate authentication tests
+make test-pat        # Personal access token tests
+make test-openfga    # OpenFGA authorization tests
+make test-e2e        # Playwright browser tests
 
 # Certificates
-make new-client     # Generate new CA-signed client cert
-make gen-cert       # Generate self-signed certificate (like ssh-keygen)
-make register-cert  # Register ~/.x509/certificate.pem for testuser
-make import-certs   # Import certs to macOS Keychain
-make remove-certs   # Remove certs from macOS Keychain
+make gen-cert        # Generate self-signed certificate (like ssh-keygen)
+make new-client      # Generate new CA-signed client cert
+make register-cert   # Register ~/.x509/certificate.pem for testuser
+make import-certs    # Import certs to macOS Keychain
+make remove-certs    # Remove certs from macOS Keychain
 
 # Utilities
-make export-realm   # Export realm from running Keycloak
-make shell-keycloak # Open shell in Keycloak container
-make shell-gateway  # Open shell in Gateway container
-make seed-openfga   # Re-run OpenFGA initialization
-make clean          # Remove all generated files
-make help           # Show all available commands
+make export-realm    # Export realm from running Keycloak
+make shell-keycloak  # Open shell in Keycloak container
+make shell-gateway   # Open shell in Gateway container
+make seed-openfga    # Re-run OpenFGA initialization
+make help            # Show all available commands
 ```
 
 ## Certificate Authentication Flow
@@ -348,20 +397,22 @@ document
 
 ## Configuration as Code
 
-Realm configuration is defined as versioned YAML migrations in `keycloak/migrations/config-cli/`, applied automatically by keycloak-config-cli on startup:
+Realm configuration is defined as versioned YAML migrations in `keycloak/migrations/config-cli/`, organized by feature layer and applied automatically by keycloak-config-cli on startup:
 
-| Migration | Description |
-|-----------|-------------|
-| `000_baseline.yaml` | Realm, roles, users, clients |
-| `001_x509-authentication-flow.yaml` | Custom X.509 browser flow |
-| `002_x509-client-mappers.yaml` | Certificate attributes in tokens |
-| `003_public-realm.yaml` | Public realm for OpenFGA |
-| `004_pat-support.yaml` | PAT client configuration |
-| `005_pat-production.yaml` | PAT production settings |
+| Layer | Directory | Migrations |
+|-------|-----------|------------|
+| Core | `config-cli/core/` | `000_baseline.yaml` — Realm, roles, users, clients |
+| X.509 | `config-cli/x509/` | `001_x509-authentication-flow.yaml` — Custom X.509 browser flow |
+| | | `002_x509-client-mappers.yaml` — Certificate attributes in tokens |
+| PAT | `config-cli/pat/` | `003_public-realm.yaml` — Public realm for PAT/OpenFGA |
+| | | `004_pat-support.yaml` — PAT client configuration |
+| | | `005_pat-production.yaml` — PAT production settings |
+
+When running a subset of layers (e.g. `make start-x509`), only the migrations for that layer and below are applied.
 
 ### Modifying Configuration
 
-Add a new numbered YAML file to `keycloak/migrations/config-cli/` and restart:
+Add a new numbered YAML file to the appropriate feature subdirectory under `keycloak/migrations/config-cli/` and restart:
 ```bash
 make restart
 ```

@@ -1,4 +1,4 @@
-.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat test-e2e help logs-gateway shell-gateway logs-openfga seed-openfga test-openfga
+.PHONY: all setup certs build build-pat start stop restart logs clean test test-health test-setup test-api test-cert test-pat test-e2e help logs-gateway shell-gateway logs-openfga seed-openfga test-openfga start-core start-x509 start-gateway start-pat start-full stop-layer
 
 # Default target
 all: setup
@@ -20,33 +20,63 @@ build:
 build-pat:
 	@./scripts/build-pat-provider.sh
 
-# Start services
-start:
-	@docker-compose up -d
+# Compose file sets for each layer
+COMPOSE_BASE    := -f docker/compose.base.yml
+COMPOSE_X509    := $(COMPOSE_BASE) -f docker/compose.x509.yml
+COMPOSE_GATEWAY := $(COMPOSE_X509) -f docker/compose.gateway.yml
+COMPOSE_PAT     := $(COMPOSE_GATEWAY) -f docker/compose.pat.yml
+COMPOSE_FULL    := $(COMPOSE_PAT) -f docker/compose.openfga.yml -f docker/compose.bench.yml
 
-# Stop services
+# Start full stack (default — backward compatible)
+start:
+	@docker compose $(COMPOSE_FULL) up -d
+
+# Start individual layers
+start-core:
+	@docker compose $(COMPOSE_BASE) up -d
+
+start-x509:
+	@docker compose $(COMPOSE_X509) up -d
+
+start-gateway:
+	@docker compose $(COMPOSE_GATEWAY) up -d
+
+start-pat:
+	@docker compose $(COMPOSE_PAT) up -d
+
+start-full:
+	@docker compose $(COMPOSE_FULL) up -d
+
+# Stop services (works with any layer combination)
 stop:
-	@docker-compose down
+	@docker compose $(COMPOSE_FULL) down
+
+# Stop a specific layer set (pass LAYER=core|x509|gateway|pat|full)
+stop-layer:
+ifndef LAYER
+	$(error LAYER is required. Usage: make stop-layer LAYER=core|x509|gateway|pat|full)
+endif
+	@docker compose $(COMPOSE_$(shell echo $(LAYER) | tr a-z A-Z)) down
 
 # Restart services
 restart:
-	@docker-compose restart
+	@docker compose $(COMPOSE_FULL) restart
 
 # View logs
 logs:
-	@docker-compose logs -f
+	@docker compose $(COMPOSE_FULL) logs -f
 
 # View Keycloak logs
 logs-keycloak:
-	@docker-compose logs -f keycloak
+	@docker compose $(COMPOSE_FULL) logs -f keycloak
 
 # View Gateway (nginx) logs
 logs-gateway:
-	@docker-compose logs -f nginx
+	@docker compose $(COMPOSE_FULL) logs -f nginx
 
 # Clean everything
 clean:
-	@docker-compose down -v
+	@docker compose $(COMPOSE_FULL) down -v
 	@rm -rf certs/
 	@rm -f keycloak/providers/*.jar
 	@rm -rf keycloak/providers/*/target/
@@ -164,11 +194,11 @@ remove-certs:
 
 # View OpenFGA logs
 logs-openfga:
-	@docker-compose logs -f openfga
+	@docker compose $(COMPOSE_FULL) logs -f openfga
 
 # Re-run OpenFGA init container (seed store, model, tuples)
 seed-openfga:
-	@docker-compose up --build --force-recreate openfga-init
+	@docker compose $(COMPOSE_FULL) up --build --force-recreate openfga-init
 
 # Run OpenFGA integration tests
 test-openfga:
@@ -178,32 +208,52 @@ test-openfga:
 help:
 	@echo "Keycloak X.509 Demo - Available targets:"
 	@echo ""
-	@echo "  make setup        - Complete setup (certs + build + start)"
-	@echo "  make certs        - Generate certificates only"
-	@echo "  make build        - Build custom Keycloak provider"
-	@echo "  make start        - Start Docker services"
-	@echo "  make stop         - Stop Docker services"
-	@echo "  make restart      - Restart Docker services"
-	@echo "  make logs         - View all logs"
-	@echo "  make logs-keycloak - View Keycloak logs"
-	@echo "  make logs-gateway - View Gateway (nginx) logs"
-	@echo "  make clean        - Remove all generated files"
-	@echo "  make test         - Run all tests"
-	@echo "  make test-health  - Test infrastructure health"
-	@echo "  make test-setup   - Register test certificates"
-	@echo "  make test-api     - Test certificate management API"
-	@echo "  make test-cert    - Test certificate authentication"
-	@echo "  make test-pat     - Test personal access tokens"
-	@echo "  make test-e2e     - Run Playwright e2e tests"
-	@echo "  make test-e2e-headed - Run e2e tests with browser visible"
-	@echo "  make export-realm - Export realm from running Keycloak"
-	@echo "  make shell-keycloak - Open shell in Keycloak container"
-	@echo "  make shell-gateway - Open shell in Gateway (nginx) container"
-	@echo "  make gen-cert     - Generate self-signed certificate (like ssh-keygen)"
-	@echo "  make register-cert - Register ~/.x509/certificate.pem for testuser"
-	@echo "  make logs-openfga - View OpenFGA logs"
-	@echo "  make seed-openfga - Re-run OpenFGA bootstrap (store, model, tuples)"
-	@echo "  make test-openfga - Run OpenFGA integration tests"
-	@echo "  make import-certs - Import certs to macOS Keychain (for browser testing)"
-	@echo "  make remove-certs - Remove certs from macOS Keychain"
+	@echo "  Setup & Build:"
+	@echo "    make setup          - Complete setup (certs + build + start)"
+	@echo "    make certs          - Generate certificates only"
+	@echo "    make build          - Build custom Keycloak providers"
+	@echo "    make build-pat      - Build PAT provider only"
+	@echo ""
+	@echo "  Feature Layers (each includes layers below it):"
+	@echo "    make start-core     - Layer 0: Keycloak + PostgreSQL"
+	@echo "    make start-x509     - Layer 1: + X.509 certificate auth"
+	@echo "    make start-gateway  - Layer 2: + Nginx gateway, UI, backend"
+	@echo "    make start-pat      - Layer 3: + Personal access tokens"
+	@echo "    make start-full     - Layer 4: + OpenFGA authorization"
+	@echo "    make start          - Full stack (all layers, default)"
+	@echo ""
+	@echo "  Service Management:"
+	@echo "    make stop           - Stop Docker services"
+	@echo "    make restart        - Restart Docker services"
+	@echo "    make clean          - Remove all generated files"
+	@echo ""
+	@echo "  Logs:"
+	@echo "    make logs           - View all logs"
+	@echo "    make logs-keycloak  - View Keycloak logs"
+	@echo "    make logs-gateway   - View Gateway (nginx) logs"
+	@echo "    make logs-openfga   - View OpenFGA logs"
+	@echo ""
+	@echo "  Testing:"
+	@echo "    make test           - Run all tests"
+	@echo "    make test-health    - Test infrastructure health"
+	@echo "    make test-setup     - Register test certificates"
+	@echo "    make test-api       - Test certificate management API"
+	@echo "    make test-cert      - Test certificate authentication"
+	@echo "    make test-pat       - Test personal access tokens"
+	@echo "    make test-openfga   - Run OpenFGA integration tests"
+	@echo "    make test-e2e       - Run Playwright e2e tests"
+	@echo "    make test-e2e-headed - Run e2e tests with browser visible"
+	@echo ""
+	@echo "  Certificates:"
+	@echo "    make gen-cert       - Generate self-signed certificate (like ssh-keygen)"
+	@echo "    make new-client     - Generate new CA-signed client cert"
+	@echo "    make register-cert  - Register ~/.x509/certificate.pem for testuser"
+	@echo "    make import-certs   - Import certs to macOS Keychain"
+	@echo "    make remove-certs   - Remove certs from macOS Keychain"
+	@echo ""
+	@echo "  Utilities:"
+	@echo "    make export-realm   - Export realm from running Keycloak"
+	@echo "    make shell-keycloak - Open shell in Keycloak container"
+	@echo "    make shell-gateway  - Open shell in Gateway container"
+	@echo "    make seed-openfga   - Re-run OpenFGA bootstrap"
 	@echo ""
