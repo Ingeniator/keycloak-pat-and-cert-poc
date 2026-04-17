@@ -173,7 +173,7 @@ function login(r) {
   var redirectUri = BASE_URL + "/auth/callback";
   // Generate cryptographic state parameter for CSRF protection
   var state = crypto.createHash("sha256")
-    .update(crypto.randomBytes(32))
+    .update(Math.random().toString() + Date.now().toString() + (r.variables.request_id || ""))
     .digest("hex")
     .substring(0, 32);
 
