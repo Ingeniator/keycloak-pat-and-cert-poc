@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven settings for internal network builds.
+  The Dockerfile substitutes __MAVEN_MIRROR__ with the MAVEN_MIRROR build arg.
+
+  Typical values for MAVEN_MIRROR:
+    Nexus:       https://nexus.corp.local/repository/maven-public
+    Artifactory: https://artifactory.corp.local/artifactory/libs-release
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
+                              https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+  <mirrors>
+    <mirror>
+      <id>internal-mirror</id>
+      <name>Internal Maven Mirror</name>
+      <!-- Routes all external repo traffic through the internal mirror -->
+      <mirrorOf>*</mirrorOf>
+      <url>__MAVEN_MIRROR__</url>
+    </mirror>
+  </mirrors>
+
+  <!--
+    Uncomment and fill in if your Nexus/Artifactory requires authentication:
+
+  <servers>
+    <server>
+      <id>internal-mirror</id>
+      <username>${env.MAVEN_USER}</username>
+      <password>${env.MAVEN_PASSWORD}</password>
+    </server>
+  </servers>
+  -->
+
+  <profiles>
+    <profile>
+      <id>internal</id>
+      <repositories>
+        <repository>
+          <id>internal-mirror</id>
+          <url>__MAVEN_MIRROR__</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>internal-mirror</id>
+          <url>__MAVEN_MIRROR__</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+
+  <activeProfiles>
+    <activeProfile>internal</activeProfile>
+  </activeProfiles>
+
+</settings>

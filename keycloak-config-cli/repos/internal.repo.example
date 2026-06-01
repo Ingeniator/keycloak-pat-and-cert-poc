@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Example internal YUM repository file.
+#
+# Copy this file to internal.repo (drop the .example suffix) and fill in your
+# actual baseurl values.  The Dockerfile copies every *.repo file from repos/
+# into /etc/yum.repos.d/ inside the container and, when at least one is found,
+# disables the default UBI-9 repos so all traffic goes through your mirror.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[internal-baseos]
+name=Internal RHEL 9 BaseOS Mirror
+baseurl=https://nexus.corp.local/repository/rhel9-baseos/
+enabled=1
+gpgcheck=0
+# gpgcheck=1
+# gpgkey=https://nexus.corp.local/repository/rhel9-baseos/RPM-GPG-KEY-redhat-release
+sslverify=0
+# sslcacert=/etc/pki/ca-trust/source/anchors/internal-ca.crt
+
+[internal-appstream]
+name=Internal RHEL 9 AppStream Mirror
+baseurl=https://nexus.corp.local/repository/rhel9-appstream/
+enabled=1
+gpgcheck=0
+sslverify=0
